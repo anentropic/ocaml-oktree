@@ -4,9 +4,13 @@ open Core_bench
 
 (*
   dune build
-  dune exec benchmarks/nearest.exe
+  dune exec benchmarks/nearest.exe -quota 3 -stabilize-gc
   or
-  _build/default/benchmarks/nearest.exe
+  _build/default/benchmarks/nearest.exe -quota 3 -stabilize-gc
+
+  (if you get "Regression failed ... because the predictors were linearly
+  dependent" when using a low quota try just up the quota, seems to be that
+  -quota 3 is about the minimum that works currently)
 *)
 
 module O = Oktree.Make (V3)
@@ -25,9 +29,13 @@ let distance a b = V3.sub a b |> V3.norm
 
 (* TESTS *)
 
-let test_nearest pts pt =
-  let root = O.of_list pts in
-  fun () -> O.nearest root.tree pt
+let test_nearest pts targets =
+  let trees = List.map O.of_list pts in
+  fun () ->
+    let open O in
+    List.map (fun ot ->
+        List.map (fun pt -> nearest ot.tree pt) targets
+      ) trees
 
 let test_control n =
   let pt = target () in
@@ -39,12 +47,20 @@ let test_control n =
     |> snd
 
 let main () =
-  let pt = target () in
+  let n_targets = 100 in
+  let targets = List.init n_targets (fun _ -> target ()) in
   let make_tests dist =
-    List.map (fun i ->
-        let pts = points dist i in
-        Bench.Test.create ~name:(Printf.sprintf "pts:%i" i) @@ test_nearest pts pt;
-      ) [256; 1024; 65536; 2097152]
+    List.map (fun (pts_per_tree, n_trees) ->
+        let pts = List.init n_trees (fun _ -> points dist pts_per_tree) in
+        Bench.Test.create
+          ~name:(Printf.sprintf "pts:%i n:%i depth" pts_per_tree (n_trees * n_targets))
+        @@ test_nearest pts targets;
+      ) [
+      (256, 25);
+      (1024, 25);
+      (65536, 8);
+      (2097152, 1);
+    ]
   in
   (*
     - points in a 'uniform' distribution are completely random, although can
@@ -58,7 +74,7 @@ let main () =
       Bench.Test.create_group ~name:"Control (list cmp + sort)" [
         Bench.Test.create ~name:"pts:256" @@ test_control 256;
         Bench.Test.create ~name:"pts:1024" @@ test_control 1024;
-        Bench.Test.create ~name:"pts:65536" @@ test_control 65536;
+        (* Bench.Test.create ~name:"pts:65536" @@ test_control 65536; *)
         (* Bench.Test.create ~name:"pts:2097152 depth" @@ test_control 2097152; *)
       ];
     ])
