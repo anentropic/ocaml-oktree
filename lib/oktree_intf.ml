@@ -78,4 +78,6 @@ sig
   val to_list : tree -> vec3 list
   val node_nearest : node -> vec3 -> vec3
   val nearest : tree -> vec3 -> vec3
+  val print_centres : ?label:string -> tree -> unit
+  val print_centre_distances : ?label:string -> tree -> vec3 -> unit
 end

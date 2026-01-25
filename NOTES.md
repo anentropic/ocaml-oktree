@@ -25,6 +25,26 @@ See https://docs.rs/charcoal/1.0.0/charcoal/ maybe? (for inspiration)
 > pointers to link to children, indices into the storage are used instead"
 
 ### TODO:
+Is octree even the best approach for my original use case?
+
+https://doc.cgal.org/latest/Orthtree/index.html#title13  
+suggests that "a kd-tree is expected to outperform the orthtree for this task" 🤔
+
+Also: 'orthtree' is the quadtree/octree concept generalised to arbitrary dimensions.
+
+https://cstheory.stackexchange.com/a/11702/65609  
+Octree will be better if you need insertions and deletions, as kd-tree would have to be rebalanced.
+kd-tree will be better for heterogenous distributions (because balanced).
+
+### TODO:
+
+Benchmark vs:
+
+- https://www.ocaml.org/p/bst/3.0.0 "bisector tree" (is this just a kd-tree?)
+- https://github.com/mariusae/ocaml-rtree "R-tree"  
+  "the R-tree data structure was designed to support nearest neighbor search in dynamic context, as it has efficient algorithms for insertions and deletions such as the R* tree" https://en.wikipedia.org/wiki/Nearest_neighbor_search#Exact_methods
+
+### TODO:
 uses for / methods of octrees other than nearest neighbour search:
 
 - **point membership:**  
@@ -316,3 +336,11 @@ https://github.com/BioHaskell/octree/blob/master/Data/Octree/Internal.hs
 
     But the end result is same as if we visited every element.
 
+- https://discuss.ocaml.org/t/a-y-combinator-you-can-actually-use/10886
+
+    > "One thing that’s cool about the Y combinator is that it lets you “overload” recursion with extra stuff."
+    > "You can ... 'factor the recursion out' into a separate function"
+    > "That lets you define higher-order functions you can pass these y-ified single-recursive-step functions into, which can augment each recursive call with, for example, a side effect"
+
+    Discusses how the OP's Y-combinator will stack overflow. A commenter gives a tail-recursive version that doesn't.
+    

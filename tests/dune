@@ -1,5 +1,6 @@
 (tests
  (names test_oktree)
+ ; (modes byte exe)
  (preprocess
   (pps ppx_deriving.show ppx_deriving_popper))
  (libraries popper gg oktree))

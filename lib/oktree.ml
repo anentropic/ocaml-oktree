@@ -51,17 +51,10 @@ struct
   let max_depth = 20  (* see: [id_to_string] *)
   let default_leaf_size = 16
 
-  (* TODO: unused *)
-  let valid_depth depth =
-    match depth with
-    | d when d < 1 -> raise @@ Invalid_argument "depth must be >= 1"
-    | d when d > max_depth ->
-      raise @@ Invalid_argument (Printf.sprintf "depth must be <= %i" max_depth)
-    | _ -> depth
-
   let repeat_3 a = (a, a, a)
 
-  let tmap8 t (a, b, c, d, e, f, g, h) = (t a, t b, t c, t d, t e, t f, t g, t h)
+  let tmap8 f (swd, sed, nwd, ned, swu, seu, nwu, neu) =
+    (f swd, f sed, f nwd, f ned, f swu, f seu, f nwu, f neu)
 
   type octant = SWD | SED | NWD | NED | SWU | SEU | NWU | NEU
   [@@deriving eq, ord, enum, show, iter]
@@ -69,15 +62,29 @@ struct
   let all_octants =
     List.init (max_octant + 1) (fun i -> octant_of_enum i |> Option.get)
 
+  (*
+    joinStep :: (Enum a1, Enum a3, Enum a2, Enum a) => (a1, a2, a3) -> a
+    joinStep (cx, cy, cz) = toEnum (fromEnum cx + 2 * fromEnum cy + 4 * fromEnum cz)
+  *)
   let octant_of_flags (cx, cy, cz) =
-    octant_of_enum ((Bool.to_int cx) + 2 * (Bool.to_int cy) + 4 * (Bool.to_int cz))
-    |> Option.get
+    let o = (Bool.to_int cx) + (2 * (Bool.to_int cy)) + (4 * (Bool.to_int cz)) in
+    octant_of_enum @@ o |> Option.get
 
-  let octant_to_flags step =
-    let a = octant_to_enum step in
+  let octant_to_flags oct =
+    let a = octant_to_enum oct in
     ((a land 1) == 1, (a land 2) == 2, (a land 4) == 4)
 
-  (* gives octant of a first vector relative to the second vector as a center *)
+  (*
+    gives octant of a first vector relative to the second vector as a center
+
+    can we say x:N-S, y:E-W, z:U-D?
+
+    cmp :: V3 Double -> V3 Double -> ODir
+    cmp ca cb = joinStep (cx, cy, cz)
+      where cx = v3x ca >= v3x cb
+            cy = v3y ca >= v3y cb
+            cz = v3z ca >= v3z cb
+  *)
   let relative_octant ca cb =
     let cx = V3.x ca >= V3.x cb
     and cy = V3.y ca >= V3.y cb
@@ -88,9 +95,8 @@ struct
   let rec split_by centre = function
     | [] -> ([], [], [], [], [], [], [], [])
     | pt::pts -> begin
-        (* TODO: we inherit this bug with duplicate points > leaf_size
-           https://github.com/BioHaskell/octree/issues/14 *)
         let octant = relative_octant pt centre in
+        (* recursion here is just visiting all pts in current level via head::tail, not going deeper *)
         let (swd, sed, nwd, ned, swu, seu, nwu, neu) = split_by centre pts in
         match octant with
         | SWD -> (pt::swd,     sed,     nwd,     ned,     swu,     seu,     nwu,     neu)
@@ -105,7 +111,7 @@ struct
 
   let split_by' f centre pts =
     let (swd, sed, nwd, ned, swu, seu, nwu, neu) =
-      tmap8 f @@ split_by centre pts
+      tmap8 f (split_by centre pts)
     in
     Node {
       centre;
@@ -164,7 +170,17 @@ struct
         V3.div (List.fold_left V3.add hd tl) (V3.of_tuple @@ repeat_3 count)
       end
 
-  (* as per the 'hask' implementation, cannot insert to existing node, only leaf *)
+  (*
+    [leaf_size] is max points per leaf before splitting
+    so we recursively split on the centre point of the *points* in each octant
+    NOTE: as per the 'hask' implementation, cannot insert to existing node, only leaf
+
+    TODO: we inherit this bug when no. of duplicate points > leaf_size
+    https://github.com/BioHaskell/octree/issues/14
+
+    Also... duplicate points will skew the calculation of [find_centre] since
+    it is finding the mean point
+  *)
   let rec from_list' leaf_size pts =
     if List.length pts <= leaf_size
     then Leaf pts
@@ -186,19 +202,6 @@ struct
       tree = from_list' leaf_size pts
     }
 
-  (*
-    recursively collect the points below a given octant
-    (I'm not sure this has much utility beyond debugging)
-  *)
-  let to_list node =
-    let rec collect pts children =
-      List.concat_map (function
-          | _, Leaf pts' -> pts @ pts'
-          | _, Node node' -> collect pts (children_of_node node')
-        ) children
-    in
-    collect [] (children_of_node node)
-
   (* Euclidean distance. Always positive (i.e. has no direction) *)
   let distance a b = V3.sub a b |> V3.norm
   (* Possible optimisation: https://stackoverflow.com/a/1678481/202168
@@ -206,7 +209,7 @@ struct
      distances then the sqrt step is superfluous (I think that
      would be just V3.norm2) *)
 
-  type candidate = Octant of octant * node | Point of vec3 [@@deriving show]
+  type candidate = Octant of node | Point of vec3 [@@deriving show]
 
   type point_list = vec3 list [@@deriving show]
 
@@ -216,13 +219,13 @@ struct
     let compare a b =
       (* PQ appears to treat items which compare equal as dups *)
       match a, b with
-      | Octant (_, a'), Octant (_, b') -> compare a' b'
+      | Octant a', Octant b' -> compare a' b'
       | Octant _, Point _ -> 1
       | Point _, Octant _ -> -1
       | Point a', Point b' -> V3.compare a' b'
     let pp fmt item =
       match item with
-      | Octant (o, node) -> Format.fprintf fmt "Octant(%a centre: %a)" pp_octant o pp_vec3 node.centre
+      | Octant node -> Format.fprintf fmt "Octant(centre: %a)" pp_vec3 node.centre
       | Point point -> Format.fprintf fmt "Point%a" pp_vec3 point
   end
   module PQ_Priority = struct
@@ -235,14 +238,6 @@ struct
   let pp_pq_pair fmt pair =
     let item, d = pair in
     Format.fprintf fmt "(%a, distance: %a)" PQ_Item.pp item PQ_Priority.pp d
-
-  let candidates_of_leaf points = List.map (fun p -> Point p) points
-
-  let candidates_of_node node =
-    List.concat_map (function
-        | o, Node node -> [Octant (o, node)]
-        | _, Leaf points -> List.map (fun p -> Point p) points
-      ) (children_of_node node)
 
   let rec to_list' pts children =
     List.concat_map (function
@@ -302,7 +297,7 @@ struct
   (*
     where [dp] is difference between pt and octant centre
     ...which is like translating octant centre (with pt) to 0,0,0 origin
-    and [odir] is the child octant id
+    and [octant] is the child octant id
   *)
   let octant_distance dp octant =
     octant_distance' (V3.map abs_float dp) (point_pos dp octant)
@@ -310,38 +305,113 @@ struct
   let octant_distances dp =
     List.map (fun o -> (o, octant_distance dp o)) all_octants
 
-  (* TODO return option type instead of raise Not_found ? *)
-  let rec nearest' pq children p =
-    (* enqueue children of current octant *)
-    let items = List.map (function
-        | Octant (o, node) as oct ->
-          let d = octant_distance (V3.sub p node.centre) o in
-          (oct, d)
-        | Point p' -> 
-          let d = distance p p' in
-          (Point p', d)
-      ) children
+  type candidate_list = candidate list
+  [@@deriving show]
+
+(*
+-- | Finds nearest neighbour for a given point.
+nearest :: Octree a -> V3 Double -> Maybe (V3 Double, a)
+nearest (Leaf l) pt = pickClosest pt l
+nearest node pt = selectFrom candidates
+  where
+    -- list of (Maybe candidate, min. bound for octant distance) tuples, sorted by min. bound
+    -- `split node` is the centre point of `node`
+    -- so we are comparing pt translated so that octant centre is the origin
+    candidates = map findCandidate . List.sortBy compareDistance . octantDistances $ pt - split node
+
+    compareDistance a b = compare (snd a) (snd b)
+
+    -- finds candidates for a given octant, d arg is passed through
+    -- d is the distance from the point to the centre of the octant
+    findCandidate (octant, d) = (nearest' . octreeStep node $ octant, d)
+
+    nearest' n = nearest n pt
+
+    -- selects the best candidate from a list of candidates (via recursive h::t pattern matching)
+    selectFrom ((Nothing, _d) : cs) = selectFrom cs  -- given octant is empty, try next
+    selectFrom ((Just best, _d) : cs) = selectFrom' best cs  -- try to improve on current best with remaining candidates
+    selectFrom [] = Nothing
+
+    -- selects a better candidate from a list of candidates (via recursive h::t pattern matching)
+    -- or returns current `best` if none better is found
+    -- d is the distance from the point to the centre of the octant
+    -- PG: I understood this as analogous to Priority Queue, given we already sorted the list
+    selectFrom' best ((Nothing, d) : cs) = selectFrom' best cs  -- continue
+    -- if candidate octant is further away than current best, just return current best
+    -- TODO: FAILS: shortcut guard to avoid recursion over whole structure (since d is bound for distance within octant):
+    selectFrom' best ((_, d) : cs) | d > dist pt (fst best) = Just best
+    -- if candidate octant is closer (or equal) than current best, try to improve on it with remaining candidates
+    selectFrom' best ((Just next, d) : cs) = selectFrom' nextBest cs
+      where
+        -- check the actual point distances
+        nextBest =
+          if dist pt (fst best) <= dist pt (fst next)
+            then best
+            else next
+    selectFrom' best [] = Just best
+*)
+
+  let enqueue_node pq node p =
+    let items =
+      List.concat_map (fun (o, child) ->
+          match child with
+          | Leaf points -> List.map (fun pt -> (Point pt, distance p pt)) points
+          | Node child_node ->
+            let d = octant_distance (V3.sub p node.centre) o in
+            [ (Octant child_node, d) ]
+        ) (children_of_node node)
     in
-    let pq = PQ.add_seq (List.to_seq items) pq in
-    (* pop current best match *)
+    PQ.add_seq (List.to_seq items) pq
+
+  (* TODO return option type instead of raise Not_found ? *)
+  let rec nearest' pq p =
     match PQ.pop pq with
-    | Some ((child, _), pq) -> begin
-        match child with
-        | Point p' -> p'  (* this is the nearest *)
-        | Octant (_, node) -> nearest' pq (candidates_of_node node) p
-      end
     | None -> raise Not_found  (* would mean our tree was empty *)
+    | Some ((candidate, _), pq') -> begin
+        match candidate with
+        | Point pt -> pt
+        | Octant node ->
+          let pq'' = enqueue_node pq' node p in
+          nearest' pq'' p
+      end
 
   let node_nearest node p =
-    nearest' PQ.empty (candidates_of_node node) p
+    let pq = enqueue_node PQ.empty node p in
+    nearest' pq p
 
   let nearest root p =
     match root with
     | Node node -> node_nearest node p
-    | Leaf points -> nearest' PQ.empty (candidates_of_leaf points) p
+    | Leaf points ->
+      let items = List.map (fun pt -> (Point pt, distance p pt)) points in
+      let pq = PQ.add_seq (List.to_seq items) PQ.empty in
+      nearest' pq p
 
   (* brute-force, for debugging *)
   let distances root p =
     List.map (fun p' -> (p', distance p p')) (to_list root)
 
+  let rec print_centres ?(label="Root") tree =
+    ignore @@ match tree with
+    | Node n -> begin
+        Format.printf "<%s> centre: %a\n" label pp_vec3 n.centre;
+        List.iter (fun o ->
+            let child = child_of_octant n o in
+            print_centres ~label:(show_octant o) child
+          ) all_octants
+      end
+    | Leaf _ -> ()
+
+  let rec print_centre_distances ?(label="Root") tree p =
+    ignore @@ match tree with
+    | Node n -> begin
+        Format.printf "<%s> p-to-centre: %f\n" label (distance n.centre p);
+        List.iter (fun o ->
+            let child = child_of_octant n o in
+            let label = label ^ ": " ^ (show_octant o) in
+            Format.printf "<%s> p-to-surface: %f\n" label (octant_distance p o);
+            print_centre_distances ~label child p
+          ) all_octants
+      end
+    | Leaf _ -> ()
 end

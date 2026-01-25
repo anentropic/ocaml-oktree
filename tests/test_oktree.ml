@@ -77,9 +77,6 @@ let sort_ggv3_list = List.sort Gg.V3.compare
    in
    Comparator.make cmp pp *)
 
-let compare_oktree = Comparator.make compare O.pp
-let compare_oktree_node = Comparator.make compare O.pp_node
-
 let distance a b = Gg.V3.sub a b |> Gg.V3.norm
 
 type point_distance_list = (float * Gg.V3.t) list [@@deriving show]
@@ -105,10 +102,10 @@ let from_tuples l = List.map (fun (x,y,z) -> Gg.V3.v x y z) l
 
 let test_of_list =
   test @@ fun () ->
-  let points = [Gg.V3.ox; Gg.V3.oy; Gg.V3.oz] |> sort_ggv3_list in
-  let root = O.of_list points in
-  let points = O.to_list root.tree |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) points points
+  let expected = [Gg.V3.ox; Gg.V3.oy; Gg.V3.oz] |> sort_ggv3_list in
+  let root = O.of_list expected in
+  let actual = O.to_list root.tree |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) actual expected
 
 let test_of_list_sample_nonempty =
   test @@ fun () ->
@@ -119,9 +116,10 @@ let test_of_list_sample_nonempty =
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
   let root = O.of_list points in
-  let points = O.to_list root.tree |> sort_ggv3_list in
-  ignore @@ equal Comparator.int (List.length points) (List.length points);
-  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) points
+  let expected = points |> sort_ggv3_list in
+  let actual = O.to_list root.tree |> sort_ggv3_list in
+  ignore @@ equal Comparator.int (List.length expected) (List.length actual);
+  equal Comparator.(list compare_ggv3) actual expected
 
 let test_nearest_handpicked_failures =
   let make points target =
@@ -206,14 +204,14 @@ let nearest_suite =
   suite
     [
       ("handpicked failures", test_nearest_handpicked_failures);
-      (* ("sampled points, nonempty", test_nearest_sample_nonempty); *)
-      (* ("sampled points, []", test_nearest_sample_empty); *)
+      ("sampled points, nonempty", test_nearest_sample_nonempty);
+      ("sampled points, []", test_nearest_sample_empty);
     ]
 
 let tests =
   suite
     [
-      (* ("of_list", of_list_suite); *)
+      ("of_list", of_list_suite);
       ("nearest", nearest_suite);
     ]
 

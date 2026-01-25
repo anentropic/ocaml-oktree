@@ -1,6 +1,7 @@
 (library
  (name oktree)
  (public_name oktree)
+ (modules oktree oktree_intf utils)
  (preprocess
   (pps
    ppx_deriving.show
@@ -12,7 +13,12 @@
    ppx_deriving.iter))
  (libraries psq))
 
-; delete me
+(library
+ (name oktree_visualise)
+ (public_name oktree.visualise)
+ (modules visualise)
+ (optional)
+ (libraries oplot))
 
 (env
  (dev
