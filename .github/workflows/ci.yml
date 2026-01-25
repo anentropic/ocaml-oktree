@@ -16,10 +16,10 @@ jobs:
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "5.2"
+          ocaml-compiler: "5.3"
 
       - name: Install dependencies
         run: opam install . --deps-only --with-test --yes
 
       - name: Run tests
-        run: dune runtest
+        run: opam exec -- dune runtest --profile test
