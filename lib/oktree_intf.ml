@@ -60,6 +60,7 @@ sig
     | Leaf of vec3 list
   and node = {
     centre : vec3;
+    half_size : float;
     mutable nwu : tree;
     mutable nwd : tree;
     mutable neu : tree;

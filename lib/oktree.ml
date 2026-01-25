@@ -24,6 +24,7 @@ struct
     | Leaf of vec3 list
   and node = {
     centre : vec3;
+    half_size : float;
     mutable nwu : tree;
     mutable nwd : tree;
     mutable neu : tree;
@@ -109,12 +110,13 @@ struct
         | NEU -> (    swd,     sed,     nwd,     ned,     swu,     seu,     nwu, pt::neu)
       end
 
-  let split_by' f centre pts =
+  let split_by' f centre half_size (swd, sed, nwd, ned, swu, seu, nwu, neu) =
     let (swd, sed, nwd, ned, swu, seu, nwu, neu) =
-      tmap8 f (split_by centre pts)
+      tmap8 f (swd, sed, nwd, ned, swu, seu, nwu, neu)
     in
     Node {
       centre;
+      half_size;
       nwu;
       nwd;
       neu;
@@ -182,11 +184,34 @@ struct
     it is finding the mean point
   *)
   let rec from_list' leaf_size pts =
-    if List.length pts <= leaf_size
+    let len = List.length pts in
+    if len <= leaf_size
     then Leaf pts
     else
       let centre = find_centre pts in
-      split_by' (from_list' leaf_size) centre pts
+      let cx = V3.x centre
+      and cy = V3.y centre
+      and cz = V3.z centre in
+      let half_size =
+        List.fold_left (fun acc pt ->
+            let dx = abs_float (V3.x pt -. cx) in
+            let dy = abs_float (V3.y pt -. cy) in
+            let dz = abs_float (V3.z pt -. cz) in
+            let d = max dx (max dy dz) in
+            if d > acc then d else acc
+          ) 0. pts
+      in
+      let (swd, sed, nwd, ned, swu, seu, nwu, neu) = split_by centre pts in
+      let degenerate =
+        List.length swd = len || List.length sed = len ||
+        List.length nwd = len || List.length ned = len ||
+        List.length swu = len || List.length seu = len ||
+        List.length nwu = len || List.length neu = len
+      in
+      if degenerate
+      then Leaf pts
+      else
+        split_by' (from_list' leaf_size) centre half_size (swd, sed, nwd, ned, swu, seu, nwu, neu)
 
   let insert root pt =
     let path = path_to pt root.tree in
@@ -300,20 +325,6 @@ struct
     (* adjacent by vertex *)
     | SWD -> V3.norm dp
 
-  let octant_distance_sq' dp = function
-    (* pt is in this octant *)
-    | NEU -> 0.0
-    (* adjacent by plane *)
-    | NWU -> let x = V3.x dp in x *. x
-    | SEU -> let y = V3.y dp in y *. y
-    | NED -> let z = V3.z dp in z *. z
-    (* adjacent by edge *)
-    | SWU -> let x = V3.x dp and y = V3.y dp in (x *. x) +. (y *. y)
-    | SED -> let y = V3.y dp and z = V3.z dp in (y *. y) +. (z *. z)
-    | NWD -> let x = V3.x dp and z = V3.z dp in (x *. x) +. (z *. z)
-    (* adjacent by vertex *)
-    | SWD -> norm_sq dp
-
   (*
     where [dp] is difference between pt and octant centre
     ...which is like translating octant centre (with pt) to 0,0,0 origin
@@ -321,9 +332,6 @@ struct
   *)
   let octant_distance dp octant =
     octant_distance' (V3.map abs_float dp) (point_pos dp octant)
-
-  let octant_distance_sq dp abs_dp octant =
-    octant_distance_sq' abs_dp (point_pos dp octant)
 
   let octant_distances dp =
     List.map (fun o -> (o, octant_distance dp o)) all_octants
@@ -374,69 +382,88 @@ nearest node pt = selectFrom candidates
     selectFrom' best [] = Just best
 *)
 
-  let enqueue_node pq node p =
-    let dp = V3.sub p node.centre in
-    let abs_dp = V3.map abs_float dp in
-    let add_best_point pq = function
-      | [] -> pq
-      | hd::tl ->
-        let best_pt, best_d2 =
-          List.fold_left (fun (best_pt, best_d2) pt ->
-              let d2 = distance_sq p pt in
-              if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
-            ) (hd, distance_sq p hd) tl
-        in
-        PQ.add (Point best_pt) best_d2 pq
-    in
-    let enqueue_child pq octant child =
+  let best_distance = function
+    | None -> infinity
+    | Some (_, d2) -> d2
+
+  let cube_distance_sq centre half_size p =
+    let dx = abs_float (V3.x p -. V3.x centre) -. half_size in
+    let dy = abs_float (V3.y p -. V3.y centre) -. half_size in
+    let dz = abs_float (V3.z p -. V3.z centre) -. half_size in
+    let dx = if dx > 0. then dx else 0. in
+    let dy = if dy > 0. then dy else 0. in
+    let dz = if dz > 0. then dz else 0. in
+    (dx *. dx) +. (dy *. dy) +. (dz *. dz)
+
+  let update_best_from_points best p points =
+    match points with
+    | [] -> best
+    | hd::tl ->
+      let (best_pt, best_d2), rest_points =
+        match best with
+        | None -> ((hd, distance_sq p hd), tl)
+        | Some (pt, d2) -> ((pt, d2), points)
+      in
+      let best_pt, best_d2 =
+        List.fold_left (fun (best_pt, best_d2) pt ->
+            let d2 = distance_sq p pt in
+            if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
+          ) (best_pt, best_d2) rest_points
+      in
+      Some (best_pt, best_d2)
+
+  let enqueue_node_with_best best pq node p =
+    let enqueue_child best pq child =
       match child with
-      | Leaf points -> add_best_point pq points
+      | Leaf points -> (update_best_from_points best p points, pq)
       | Node child_node ->
-        let d2 = octant_distance_sq dp abs_dp octant in
-        PQ.add (Octant child_node) d2 pq
+        let d2 = cube_distance_sq child_node.centre child_node.half_size p in
+        if d2 < best_distance best
+        then (best, PQ.add (Octant child_node) d2 pq)
+        else (best, pq)
     in
-    let pq = enqueue_child pq NWU node.nwu in
-    let pq = enqueue_child pq NWD node.nwd in
-    let pq = enqueue_child pq NEU node.neu in
-    let pq = enqueue_child pq NED node.ned in
-    let pq = enqueue_child pq SWU node.swu in
-    let pq = enqueue_child pq SWD node.swd in
-    let pq = enqueue_child pq SEU node.seu in
-    enqueue_child pq SED node.sed
+    let best, pq = enqueue_child best pq node.nwu in
+    let best, pq = enqueue_child best pq node.nwd in
+    let best, pq = enqueue_child best pq node.neu in
+    let best, pq = enqueue_child best pq node.ned in
+    let best, pq = enqueue_child best pq node.swu in
+    let best, pq = enqueue_child best pq node.swd in
+    let best, pq = enqueue_child best pq node.seu in
+    enqueue_child best pq node.sed
 
   (* TODO return option type instead of raise Not_found ? *)
-  let rec nearest' pq p =
+  let rec nearest' best pq p =
     match PQ.pop pq with
-    | None -> raise Not_found  (* would mean our tree was empty *)
-    | Some ((candidate, _), pq') -> begin
+    | None -> begin
+        match best with
+        | None -> raise Not_found  (* would mean our tree was empty *)
+        | Some (pt, _) -> pt
+      end
+    | Some ((candidate, d2), pq') -> begin
         match candidate with
-        | Point pt -> pt
+        | Point pt -> begin
+            let best' =
+              if d2 < best_distance best
+              then Some (pt, d2)
+              else best
+            in
+            nearest' best' pq' p
+          end
         | Octant node ->
-          let pq'' = enqueue_node pq' node p in
-          nearest' pq'' p
+          let best', pq'' = enqueue_node_with_best best pq' node p in
+          nearest' best' pq'' p
       end
 
   let node_nearest node p =
-    let pq = enqueue_node PQ.empty node p in
-    nearest' pq p
+    let best, pq = enqueue_node_with_best None PQ.empty node p in
+    nearest' best pq p
 
   let nearest root p =
     match root with
     | Node node -> node_nearest node p
     | Leaf points ->
-      let pq =
-        match points with
-        | [] -> PQ.empty
-        | hd::tl ->
-          let best_pt, best_d2 =
-            List.fold_left (fun (best_pt, best_d2) pt ->
-                let d2 = distance_sq p pt in
-                if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
-              ) (hd, distance_sq p hd) tl
-          in
-          PQ.add (Point best_pt) best_d2 PQ.empty
-      in
-      nearest' pq p
+      let best = update_best_from_points None p points in
+      nearest' best PQ.empty p
 
   (* brute-force, for debugging *)
   let distances root p =
