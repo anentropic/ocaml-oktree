@@ -234,7 +234,11 @@ struct
     and y = V3.y v
     and z = V3.z v in
     (x *. x) +. (y *. y) +. (z *. z)
-  let distance_sq a b = V3.sub a b |> norm_sq
+  let distance_sq_coords px py pz pt =
+    let dx = V3.x pt -. px in
+    let dy = V3.y pt -. py in
+    let dz = V3.z pt -. pz in
+    (dx *. dx) +. (dy *. dy) +. (dz *. dz)
   (* Possible optimisation: https://stackoverflow.com/a/1678481/202168
      if we only need to 'sort' and don't care about magnitude of
      distances then the sqrt step is superfluous (I think that
@@ -244,31 +248,84 @@ struct
 
   type point_list = vec3 list [@@deriving show]
 
-  (* make Priority Queue types for our nearest search *)
-  module PQ_Item = struct
-    type t = candidate
-    let compare a b =
-      (* PQ appears to treat items which compare equal as dups *)
-      match a, b with
-      | Octant a', Octant b' -> compare a' b'
-      | Octant _, Point _ -> 1
-      | Point _, Octant _ -> -1
-      | Point a', Point b' -> V3.compare a' b'
-    let pp fmt item =
-      match item with
-      | Octant node -> Format.fprintf fmt "Octant(centre: %a)" pp_vec3 node.centre
-      | Point point -> Format.fprintf fmt "Point%a" pp_vec3 point
-  end
-  module PQ_Priority = struct
-    type t = float
-    let compare = compare
-    let pp fmt = Format.fprintf fmt (format_of_string "%f")
-  end
-  module PQ = Psq.Make(PQ_Item)(PQ_Priority)
+  type heap = {
+    mutable size : int;
+    mutable nodes : candidate array;
+    mutable d2 : float array;
+  }
 
-  let pp_pq_pair fmt pair =
-    let item, d = pair in
-    Format.fprintf fmt "(%a, distance: %a)" PQ_Item.pp item PQ_Priority.pp d
+  let heap_create () =
+    let dummy = Point (V3.of_tuple (0., 0., 0.)) in
+    {
+      size = 0;
+      nodes = Array.make 16 dummy;
+      d2 = Array.make 16 infinity;
+    }
+
+  let heap_swap h i j =
+    let tmp_node = h.nodes.(i) in
+    let tmp_d2 = h.d2.(i) in
+    h.nodes.(i) <- h.nodes.(j);
+    h.d2.(i) <- h.d2.(j);
+    h.nodes.(j) <- tmp_node;
+    h.d2.(j) <- tmp_d2
+
+  let heap_grow h =
+    let old_len = Array.length h.nodes in
+    let new_len = old_len * 2 in
+    let dummy = h.nodes.(0) in
+    let new_nodes = Array.make new_len dummy in
+    let new_d2 = Array.make new_len infinity in
+    Array.blit h.nodes 0 new_nodes 0 old_len;
+    Array.blit h.d2 0 new_d2 0 old_len;
+    h.nodes <- new_nodes;
+    h.d2 <- new_d2
+
+  let heap_push h node d2 =
+    if h.size = Array.length h.nodes then heap_grow h;
+    let i = h.size in
+    h.size <- i + 1;
+    h.nodes.(i) <- node;
+    h.d2.(i) <- d2;
+    let rec sift_up i =
+      if i = 0 then ()
+      else
+        let p = (i - 1) / 2 in
+        if h.d2.(i) < h.d2.(p) then (
+          heap_swap h i p;
+          sift_up p
+        )
+    in
+    sift_up i
+
+  let heap_pop h =
+    if h.size = 0 then None
+    else
+      let min_node = h.nodes.(0) in
+      let min_d2 = h.d2.(0) in
+      let last = h.size - 1 in
+      h.size <- last;
+      if last > 0 then (
+        h.nodes.(0) <- h.nodes.(last);
+        h.d2.(0) <- h.d2.(last);
+        let rec sift_down i =
+          let left = (2 * i) + 1 in
+          if left >= h.size then ()
+          else
+            let right = left + 1 in
+            let smallest =
+              if right < h.size && h.d2.(right) < h.d2.(left)
+              then right
+              else left
+            in
+            if h.d2.(smallest) < h.d2.(i) then (
+              heap_swap h i smallest;
+              sift_down smallest
+            )
+        in
+        sift_down 0
+      );
+      Some (min_node, min_d2)
 
   let rec to_list' pts children =
     List.concat_map (function
@@ -386,84 +443,96 @@ nearest node pt = selectFrom candidates
     | None -> infinity
     | Some (_, d2) -> d2
 
-  let cube_distance_sq centre half_size p =
-    let dx = abs_float (V3.x p -. V3.x centre) -. half_size in
-    let dy = abs_float (V3.y p -. V3.y centre) -. half_size in
-    let dz = abs_float (V3.z p -. V3.z centre) -. half_size in
+  let cube_distance_sq_coords px py pz centre half_size =
+    let dx = abs_float (px -. V3.x centre) -. half_size in
+    let dy = abs_float (py -. V3.y centre) -. half_size in
+    let dz = abs_float (pz -. V3.z centre) -. half_size in
     let dx = if dx > 0. then dx else 0. in
     let dy = if dy > 0. then dy else 0. in
     let dz = if dz > 0. then dz else 0. in
     (dx *. dx) +. (dy *. dy) +. (dz *. dz)
 
-  let update_best_from_points best p points =
+  let update_best_from_points_coords best px py pz points =
     match points with
     | [] -> best
     | hd::tl ->
       let (best_pt, best_d2), rest_points =
         match best with
-        | None -> ((hd, distance_sq p hd), tl)
+        | None -> ((hd, distance_sq_coords px py pz hd), tl)
         | Some (pt, d2) -> ((pt, d2), points)
       in
       let best_pt, best_d2 =
         List.fold_left (fun (best_pt, best_d2) pt ->
-            let d2 = distance_sq p pt in
+            let d2 = distance_sq_coords px py pz pt in
             if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
           ) (best_pt, best_d2) rest_points
       in
       Some (best_pt, best_d2)
 
-  let enqueue_node_with_best best pq node p =
-    let enqueue_child best pq child =
+  let enqueue_node_with_best best heap node px py pz =
+    let enqueue_child best child =
       match child with
-      | Leaf points -> (update_best_from_points best p points, pq)
+      | Leaf points -> update_best_from_points_coords best px py pz points
       | Node child_node ->
-        let d2 = cube_distance_sq child_node.centre child_node.half_size p in
-        if d2 < best_distance best
-        then (best, PQ.add (Octant child_node) d2 pq)
-        else (best, pq)
+        let d2 = cube_distance_sq_coords px py pz child_node.centre child_node.half_size in
+        if d2 < best_distance best then (
+          heap_push heap (Octant child_node) d2;
+          best
+        ) else best
     in
-    let best, pq = enqueue_child best pq node.nwu in
-    let best, pq = enqueue_child best pq node.nwd in
-    let best, pq = enqueue_child best pq node.neu in
-    let best, pq = enqueue_child best pq node.ned in
-    let best, pq = enqueue_child best pq node.swu in
-    let best, pq = enqueue_child best pq node.swd in
-    let best, pq = enqueue_child best pq node.seu in
-    enqueue_child best pq node.sed
+    let best = enqueue_child best node.nwu in
+    let best = enqueue_child best node.nwd in
+    let best = enqueue_child best node.neu in
+    let best = enqueue_child best node.ned in
+    let best = enqueue_child best node.swu in
+    let best = enqueue_child best node.swd in
+    let best = enqueue_child best node.seu in
+    enqueue_child best node.sed
 
   (* TODO return option type instead of raise Not_found ? *)
-  let rec nearest' best pq p =
-    match PQ.pop pq with
+  let rec nearest' best heap px py pz =
+    match heap_pop heap with
     | None -> begin
         match best with
         | None -> raise Not_found  (* would mean our tree was empty *)
         | Some (pt, _) -> pt
       end
-    | Some ((candidate, d2), pq') -> begin
-        match candidate with
-        | Point pt -> begin
-            let best' =
-              if d2 < best_distance best
-              then Some (pt, d2)
-              else best
-            in
-            nearest' best' pq' p
+    | Some (candidate, d2) -> begin
+        match best with
+        | Some (pt, best_d2) when d2 >= best_d2 -> pt
+        | _ -> begin
+            match candidate with
+            | Point pt -> begin
+                let best' =
+                  if d2 < best_distance best
+                  then Some (pt, d2)
+                  else best
+                in
+                nearest' best' heap px py pz
+              end
+            | Octant node ->
+              let best' = enqueue_node_with_best best heap node px py pz in
+              nearest' best' heap px py pz
           end
-        | Octant node ->
-          let best', pq'' = enqueue_node_with_best best pq' node p in
-          nearest' best' pq'' p
       end
 
   let node_nearest node p =
-    let best, pq = enqueue_node_with_best None PQ.empty node p in
-    nearest' best pq p
+    let px = V3.x p
+    and py = V3.y p
+    and pz = V3.z p in
+    let heap = heap_create () in
+    let best = enqueue_node_with_best None heap node px py pz in
+    nearest' best heap px py pz
 
   let nearest root p =
     match root with
     | Node node -> node_nearest node p
     | Leaf points ->
-      let best = update_best_from_points None p points in
-      nearest' best PQ.empty p
+      let px = V3.x p
+      and py = V3.y p
+      and pz = V3.z p in
+      let best = update_best_from_points_coords None px py pz points in
+      nearest' best (heap_create ()) px py pz
 
   (* brute-force, for debugging *)
   let distances root p =
