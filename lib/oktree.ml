@@ -469,70 +469,89 @@ nearest node pt = selectFrom candidates
       in
       Some (best_pt, best_d2)
 
-  let enqueue_node_with_best best heap node px py pz =
-    let enqueue_child best child =
-      match child with
-      | Leaf points -> update_best_from_points_coords best px py pz points
-      | Node child_node ->
-        let d2 = cube_distance_sq_coords px py pz child_node.centre child_node.half_size in
-        if d2 < best_distance best then (
-          heap_push heap (Octant child_node) d2;
-          best
-        ) else best
+  (* Depth-first nearest neighbor search with aggressive pruning.
+     Key optimizations:
+     1. Visit the octant containing the query point first (most likely to have nearest)
+     2. Prune octants whose closest point is farther than current best
+     3. No heap allocation - pure recursive traversal *)
+
+  let[@inline] cube_dist_sq px py pz cx cy cz hs =
+    let dx = abs_float (px -. cx) -. hs in
+    let dy = abs_float (py -. cy) -. hs in
+    let dz = abs_float (pz -. cz) -. hs in
+    let dx = if dx > 0. then dx else 0. in
+    let dy = if dy > 0. then dy else 0. in
+    let dz = if dz > 0. then dz else 0. in
+    (dx *. dx) +. (dy *. dy) +. (dz *. dz)
+
+  let[@inline] search_leaf best_d2 best_pt px py pz points =
+    let rec loop best_d2 best_pt = function
+      | [] -> (best_d2, best_pt)
+      | pt::rest ->
+        let d2 = distance_sq_coords px py pz pt in
+        if d2 < best_d2 then loop d2 (Some pt) rest
+        else loop best_d2 best_pt rest
     in
-    let best = enqueue_child best node.nwu in
-    let best = enqueue_child best node.nwd in
-    let best = enqueue_child best node.neu in
-    let best = enqueue_child best node.ned in
-    let best = enqueue_child best node.swu in
-    let best = enqueue_child best node.swd in
-    let best = enqueue_child best node.seu in
-    enqueue_child best node.sed
+    loop best_d2 best_pt points
 
-  (* TODO return option type instead of raise Not_found ? *)
-  let rec nearest' best heap px py pz =
-    match heap_pop heap with
-    | None -> begin
-        match best with
-        | None -> raise Not_found  (* would mean our tree was empty *)
-        | Some (pt, _) -> pt
-      end
-    | Some (candidate, d2) -> begin
-        match best with
-        | Some (pt, best_d2) when d2 >= best_d2 -> pt
-        | _ -> begin
-            match candidate with
-            | Point pt -> begin
-                let best' =
-                  if d2 < best_distance best
-                  then Some (pt, d2)
-                  else best
-                in
-                nearest' best' heap px py pz
-              end
-            | Octant node ->
-              let best' = enqueue_node_with_best best heap node px py pz in
-              nearest' best' heap px py pz
-          end
-      end
+  (* Search a single child, returning updated best *)
+  let rec search_child best_d2 best_pt px py pz child =
+    match child with
+    | Leaf points -> search_leaf best_d2 best_pt px py pz points
+    | Node n ->
+      let cx = V3.x n.centre and cy = V3.y n.centre and cz = V3.z n.centre in
+      let d2 = cube_dist_sq px py pz cx cy cz n.half_size in
+      if d2 >= best_d2 then (best_d2, best_pt)
+      else search_node best_d2 best_pt px py pz n
 
-  let node_nearest node p =
-    let px = V3.x p
-    and py = V3.y p
-    and pz = V3.z p in
-    let heap = heap_create () in
-    let best = enqueue_node_with_best None heap node px py pz in
-    nearest' best heap px py pz
+  (* Search all 8 children of a node, starting with the one containing the query point *)
+  and search_node best_d2 best_pt px py pz node =
+    let cx = V3.x node.centre and cy = V3.y node.centre and cz = V3.z node.centre in
+    (* Determine which octant the query point is in *)
+    let ge_x = px >= cx and ge_y = py >= cy and ge_z = pz >= cz in
+    (* Get children in order from primary octant outward *)
+    let c0, c1, c2, c3, c4, c5, c6, c7 =
+      match (ge_x, ge_y, ge_z) with
+      | (false, false, false) -> 
+        node.swd, node.sed, node.nwd, node.swu, node.ned, node.seu, node.nwu, node.neu
+      | (true,  false, false) -> 
+        node.sed, node.swd, node.ned, node.seu, node.nwd, node.swu, node.neu, node.nwu
+      | (false, true,  false) -> 
+        node.nwd, node.ned, node.swd, node.nwu, node.sed, node.swu, node.neu, node.seu
+      | (true,  true,  false) -> 
+        node.ned, node.nwd, node.sed, node.neu, node.swd, node.seu, node.nwu, node.swu
+      | (false, false, true)  -> 
+        node.swu, node.seu, node.nwu, node.swd, node.neu, node.sed, node.nwd, node.ned
+      | (true,  false, true)  -> 
+        node.seu, node.swu, node.neu, node.sed, node.nwu, node.swd, node.ned, node.nwd
+      | (false, true,  true)  -> 
+        node.nwu, node.neu, node.swu, node.nwd, node.seu, node.swd, node.ned, node.sed
+      | (true,  true,  true)  -> 
+        node.neu, node.nwu, node.seu, node.ned, node.swu, node.nwd, node.sed, node.swd
+    in
+    (* Search all children in order, with pruning *)
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c0 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c1 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c2 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c3 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c4 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c5 in
+    let (best_d2, best_pt) = search_child best_d2 best_pt px py pz c6 in
+    search_child best_d2 best_pt px py pz c7
 
   let nearest root p =
+    let px = V3.x p and py = V3.y p and pz = V3.z p in
     match root with
-    | Node node -> node_nearest node p
-    | Leaf points ->
-      let px = V3.x p
-      and py = V3.y p
-      and pz = V3.z p in
-      let best = update_best_from_points_coords None px py pz points in
-      nearest' best (heap_create ()) px py pz
+    | Leaf points -> begin
+        match search_leaf infinity None px py pz points with
+        | (_, None) -> raise Not_found
+        | (_, Some pt) -> pt
+      end
+    | Node node -> begin
+        match search_node infinity None px py pz node with
+        | (_, None) -> raise Not_found
+        | (_, Some pt) -> pt
+      end
 
   (* brute-force, for debugging *)
   let distances root p =
