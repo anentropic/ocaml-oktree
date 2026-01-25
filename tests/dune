@@ -1,9 +1,18 @@
-(tests
- (names test_oktree)
+(executable
+ (name test_oktree)
  ; (modes byte exe)
  (preprocess
   (pps ppx_deriving.show ppx_deriving_popper))
- (libraries popper gg oktree))
+ (libraries popper gg oktree)
+ (enabled_if
+  (= %{profile} test)))
+
+(rule
+ (alias runtest)
+ (enabled_if
+  (= %{profile} test))
+ (action
+  (run %{exe:test_oktree.exe})))
 
 (env
  (dev

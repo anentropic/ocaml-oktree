@@ -15,12 +15,12 @@
  (description "A simple octree implementation in OCaml, intended to efficiently find nearest match for an arbitrary point among a set of points in 3D coordinate space.")
  (depends
   ; opam install . --deps-only --with-test
-  (ocaml (>= 5.1))
+  (ocaml (>= 5.3))
   (psq (>= 0.2))
-    ; benchmark deps
-    (core (>= 0.15.0))
-    (core_bench (>= 0.15.0))
-    (core_unix (>= 0.15.0))
+  ppx_deriving
+  ; benchmark deps
+  (core_bench (and :with-bench (>= 0.15.0)))
+  (core_unix (and :with-bench (>= 0.15.0)))
   ; test deps
   (ppx_deriving_popper (and :with-test (>= 0.1.1)))
   (gg (and :with-test (>= 1.0)))
@@ -32,5 +32,6 @@
   ; opam install oplot
 
   ; dev deps (to be installed manually):
-  ; opam install ocaml-lsp-server ocp-indent ocp-index ocamlformat down ocamlfind
+    ; opam install ocaml-lsp-server ocp-indent ocp-index ocamlformat down ocamlfind
+    (ocamlformat (and :with-dev-setup))
  ))
