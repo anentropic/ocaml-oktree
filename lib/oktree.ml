@@ -204,6 +204,12 @@ struct
 
   (* Euclidean distance. Always positive (i.e. has no direction) *)
   let distance a b = V3.sub a b |> V3.norm
+  let norm_sq v =
+    let x = V3.x v
+    and y = V3.y v
+    and z = V3.z v in
+    (x *. x) +. (y *. y) +. (z *. z)
+  let distance_sq a b = V3.sub a b |> norm_sq
   (* Possible optimisation: https://stackoverflow.com/a/1678481/202168
      if we only need to 'sort' and don't care about magnitude of
      distances then the sqrt step is superfluous (I think that
@@ -294,6 +300,20 @@ struct
     (* adjacent by vertex *)
     | SWD -> V3.norm dp
 
+  let octant_distance_sq' dp = function
+    (* pt is in this octant *)
+    | NEU -> 0.0
+    (* adjacent by plane *)
+    | NWU -> let x = V3.x dp in x *. x
+    | SEU -> let y = V3.y dp in y *. y
+    | NED -> let z = V3.z dp in z *. z
+    (* adjacent by edge *)
+    | SWU -> let x = V3.x dp and y = V3.y dp in (x *. x) +. (y *. y)
+    | SED -> let y = V3.y dp and z = V3.z dp in (y *. y) +. (z *. z)
+    | NWD -> let x = V3.x dp and z = V3.z dp in (x *. x) +. (z *. z)
+    (* adjacent by vertex *)
+    | SWD -> norm_sq dp
+
   (*
     where [dp] is difference between pt and octant centre
     ...which is like translating octant centre (with pt) to 0,0,0 origin
@@ -301,6 +321,9 @@ struct
   *)
   let octant_distance dp octant =
     octant_distance' (V3.map abs_float dp) (point_pos dp octant)
+
+  let octant_distance_sq dp abs_dp octant =
+    octant_distance_sq' abs_dp (point_pos dp octant)
 
   let octant_distances dp =
     List.map (fun o -> (o, octant_distance dp o)) all_octants
@@ -352,16 +375,34 @@ nearest node pt = selectFrom candidates
 *)
 
   let enqueue_node pq node p =
-    let items =
-      List.concat_map (fun (o, child) ->
-          match child with
-          | Leaf points -> List.map (fun pt -> (Point pt, distance p pt)) points
-          | Node child_node ->
-            let d = octant_distance (V3.sub p node.centre) o in
-            [ (Octant child_node, d) ]
-        ) (children_of_node node)
+    let dp = V3.sub p node.centre in
+    let abs_dp = V3.map abs_float dp in
+    let add_best_point pq = function
+      | [] -> pq
+      | hd::tl ->
+        let best_pt, best_d2 =
+          List.fold_left (fun (best_pt, best_d2) pt ->
+              let d2 = distance_sq p pt in
+              if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
+            ) (hd, distance_sq p hd) tl
+        in
+        PQ.add (Point best_pt) best_d2 pq
     in
-    PQ.add_seq (List.to_seq items) pq
+    let enqueue_child pq octant child =
+      match child with
+      | Leaf points -> add_best_point pq points
+      | Node child_node ->
+        let d2 = octant_distance_sq dp abs_dp octant in
+        PQ.add (Octant child_node) d2 pq
+    in
+    let pq = enqueue_child pq NWU node.nwu in
+    let pq = enqueue_child pq NWD node.nwd in
+    let pq = enqueue_child pq NEU node.neu in
+    let pq = enqueue_child pq NED node.ned in
+    let pq = enqueue_child pq SWU node.swu in
+    let pq = enqueue_child pq SWD node.swd in
+    let pq = enqueue_child pq SEU node.seu in
+    enqueue_child pq SED node.sed
 
   (* TODO return option type instead of raise Not_found ? *)
   let rec nearest' pq p =
@@ -383,8 +424,18 @@ nearest node pt = selectFrom candidates
     match root with
     | Node node -> node_nearest node p
     | Leaf points ->
-      let items = List.map (fun pt -> (Point pt, distance p pt)) points in
-      let pq = PQ.add_seq (List.to_seq items) PQ.empty in
+      let pq =
+        match points with
+        | [] -> PQ.empty
+        | hd::tl ->
+          let best_pt, best_d2 =
+            List.fold_left (fun (best_pt, best_d2) pt ->
+                let d2 = distance_sq p pt in
+                if d2 < best_d2 then (pt, d2) else (best_pt, best_d2)
+              ) (hd, distance_sq p hd) tl
+          in
+          PQ.add (Point best_pt) best_d2 PQ.empty
+      in
       nearest' pq p
 
   (* brute-force, for debugging *)
