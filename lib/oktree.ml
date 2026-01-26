@@ -70,7 +70,7 @@ module Make =
 
       let octant_to_flags oct =
         let a = octant_to_enum oct in
-        (a land 1 == 1, a land 2 == 2, a land 4 == 4)
+        (a land 1 = 1, a land 2 = 2, a land 4 = 4)
 
     (*
     gives octant of a first vector relative to the second vector as a center
@@ -132,21 +132,22 @@ module Make =
           step :: path_to pt (child_of_octant node step)
 
       let rec apply_by_path f octants tree =
-        match tree with
-        | Leaf _ -> f tree (* TODO not clear what hask version does here *)
-        | Node node -> (
-            match octants with
-            | [] -> f tree
-            | step :: path -> (
-                match step with
-                | NWU -> Node { node with nwu = apply_by_path f path node.nwu }
-                | NWD -> Node { node with nwd = apply_by_path f path node.nwd }
-                | NEU -> Node { node with neu = apply_by_path f path node.neu }
-                | NED -> Node { node with ned = apply_by_path f path node.ned }
-                | SWU -> Node { node with swu = apply_by_path f path node.swu }
-                | SWD -> Node { node with swd = apply_by_path f path node.swd }
-                | SEU -> Node { node with seu = apply_by_path f path node.seu }
-                | SED -> Node { node with sed = apply_by_path f path node.sed }))
+        (* Once we reach a leaf, we cannot descend further in the tree; we
+           therefore apply [f] to that leaf regardless of any remaining
+           octants in the path. *)
+        match (octants, tree) with
+        | _, Leaf _ -> f tree
+        | [], Node _ -> f tree
+        | step :: path, Node node -> (
+            match step with
+            | NWU -> Node { node with nwu = apply_by_path f path node.nwu }
+            | NWD -> Node { node with nwd = apply_by_path f path node.nwd }
+            | NEU -> Node { node with neu = apply_by_path f path node.neu }
+            | NED -> Node { node with ned = apply_by_path f path node.ned }
+            | SWU -> Node { node with swu = apply_by_path f path node.swu }
+            | SWD -> Node { node with swd = apply_by_path f path node.swd }
+            | SEU -> Node { node with seu = apply_by_path f path node.seu }
+            | SED -> Node { node with sed = apply_by_path f path node.sed })
 
       let find_centre pts =
         match pts with
