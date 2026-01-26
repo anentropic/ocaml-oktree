@@ -204,7 +204,7 @@ module Make =
         let insert' = function
           | Leaf l -> from_list' root.leaf_size (pt :: l)
           | Node _ ->
-              raise @@ Invalid_argument "Cannot insert into a Node - inserts can only be performed on Leaf nodes"
+            raise @@ Invalid_argument "Cannot insert into a Node - inserts can only be performed on Leaf nodes"
         in
         apply_by_path insert' path root.tree
 
@@ -450,7 +450,7 @@ module Make =
                let child = child_of_octant n o in
                let label = label ^ ": " ^ show_octant o in
                Format.printf "<%s> p-to-surface: %f\n" label
-                 (octant_distance p o);
+                 (octant_distance (V3.sub p n.centre) o);
                print_centre_distances ~label child p)
             all_octants
         | Leaf _ -> ()
