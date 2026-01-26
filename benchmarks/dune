@@ -3,7 +3,7 @@
  (modules nearest)
  (libraries core_bench core_unix gg oktree)
  (enabled_if
-  (= %{profile} bench)))
+  (= %{profile} test)))
 
 (env
  (dev

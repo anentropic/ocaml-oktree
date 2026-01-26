@@ -14,13 +14,15 @@ depends: [
   "ocaml" {>= "5.3"}
   "psq" {>= "0.2"}
   "ppx_deriving"
-  "core_bench" {with-bench & >= "0.15.0"}
-  "core_unix" {with-bench & >= "0.15.0"}
   "ppx_deriving_popper" {with-test & >= "0.1.1"}
   "gg" {with-test & >= "1.0"}
+  "core_bench" {with-test & >= "0.15.0"}
+  "core_unix" {with-test & >= "0.15.0"}
   "ocamlformat" {with-dev-setup}
+  "ocp-indent" {with-dev-setup}
   "odoc" {with-doc}
 ]
+depopts: ["oplot"]
 build: [
   ["dune" "subst"] {dev}
   [
