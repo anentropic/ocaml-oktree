@@ -3,7 +3,7 @@ open Core_bench
 
 (*
   dune build --profile test
-  dune exec --profile test benchmarks/nearest.exe -quota 3 -stabilize-gc
+  dune exec --profile test benchmarks/nearest.exe -- -quota 3 -stabilize-gc
 *)
 
 module O = Oktree.Make (V3)
