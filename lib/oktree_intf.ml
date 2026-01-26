@@ -57,7 +57,7 @@ module type OKTREE = sig
   val pp : Format.formatter -> t -> unit
   val pp_tree : Format.formatter -> tree -> unit
   val pp_node : Format.formatter -> node -> unit
-  val insert : t -> vec3 -> tree
+  val insert : t -> vec3 -> t
   val of_list : ?leaf_size:int -> vec3 list -> t
   val to_list : tree -> vec3 list
   val tree_of : t -> tree

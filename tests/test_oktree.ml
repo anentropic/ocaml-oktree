@@ -266,8 +266,8 @@ let test_insert_to_empty =
   (* Test inserting a point into an empty tree *)
   let root = O.of_list [] in
   let pt = Gg.V3.v 0.5 0.5 0.5 in
-  let new_tree = O.insert root pt in
-  let points = O.to_list new_tree in
+  let new_root = O.insert root pt in
+  let points = O.to_list (O.tree_of new_root) in
   equal Comparator.(list compare_ggv3) [ pt ] points
 
 let test_insert_multiple =
@@ -276,8 +276,8 @@ let test_insert_multiple =
   let pt1 = Gg.V3.v 0.1 0.1 0.1 in
   let root1 = O.of_list [ pt1 ] in
   let pt2 = Gg.V3.v 0.9 0.9 0.9 in
-  let tree2 = O.insert root1 pt2 in
-  let points = O.to_list tree2 |> sort_ggv3_list in
+  let root2 = O.insert root1 pt2 in
+  let points = O.to_list (O.tree_of root2) |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) (sort_ggv3_list [ pt1; pt2 ]) points
 
 let test_points_at_boundaries =
