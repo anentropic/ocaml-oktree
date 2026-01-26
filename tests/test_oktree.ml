@@ -250,16 +250,16 @@ let test_nearest_single_point =
 
 let test_invalid_leaf_size =
   test @@ fun () ->
-  (* Test that invalid leaf_size parameters are handled *)
+  (* Test that invalid leaf_size parameters raise an error *)
   let* leaf_size = Sample.one_value_of [ 0; -1; -10 ] in
   let points = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] in
-  (* The implementation should either handle this gracefully or raise an error *)
-  (* For now, we test that creating with invalid leaf_size doesn't crash *)
-  let root = O.of_list ~leaf_size points in
-  let tree = O.tree_of root in
-  let result_points = O.to_list tree |> sort_ggv3_list in
-  (* Even with invalid leaf_size, all points should be preserved *)
-  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result_points
+  let exc_f f =
+    try Some (Ok (f ())) with Invalid_argument _ -> None
+  in
+  expect_raises
+    (fun () -> O.of_list ~leaf_size points)
+    exc_f
+    (fun fmt _ -> Format.fprintf fmt "<tree>")
 
 let test_insert_to_empty =
   test @@ fun () ->

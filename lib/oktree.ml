@@ -213,7 +213,10 @@ module Make =
         apply_by_path insert' path root.tree
 
       let of_list ?(leaf_size = default_leaf_size) pts =
-        { leaf_size; tree = from_list' leaf_size pts }
+        if leaf_size < 1 then
+          raise @@ Invalid_argument "leaf_size must be at least 1"
+        else
+          { leaf_size; tree = from_list' leaf_size pts }
 
       let tree_of t = t.tree
 
