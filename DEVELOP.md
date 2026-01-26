@@ -3,7 +3,7 @@
 Initial set up:
 
 ```sh
-opam sswitch create .
+opam switch create .
 eval $(opam env)
 opam install . --deps-only --with-dev-setup --with-test
 ```

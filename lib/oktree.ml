@@ -203,7 +203,8 @@ module Make =
         let path = path_to pt root.tree in
         let insert' = function
           | Leaf l -> from_list' root.leaf_size (pt :: l)
-          | Node _ -> raise @@ Invalid_argument ""
+          | Node _ ->
+              raise @@ Invalid_argument "Cannot insert into a Node - inserts can only be performed on Leaf nodes"
         in
         apply_by_path insert' path root.tree
 
