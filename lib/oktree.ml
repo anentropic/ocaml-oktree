@@ -184,15 +184,24 @@ module Make =
               0. pts
           in
           let swd, sed, nwd, ned, swu, seu, nwu, neu = split_by centre pts in
+          (* Compute lengths once to avoid redundant O(n) traversals *)
+          let len_swd = List.length swd in
+          let len_sed = List.length sed in
+          let len_nwd = List.length nwd in
+          let len_ned = List.length ned in
+          let len_swu = List.length swu in
+          let len_seu = List.length seu in
+          let len_nwu = List.length nwu in
+          let len_neu = List.length neu in
           let degenerate =
-            List.length swd = len
-            || List.length sed = len
-            || List.length nwd = len
-            || List.length ned = len
-            || List.length swu = len
-            || List.length seu = len
-            || List.length nwu = len
-            || List.length neu = len
+            len_swd = len
+            || len_sed = len
+            || len_nwd = len
+            || len_ned = len
+            || len_swu = len
+            || len_seu = len
+            || len_nwu = len
+            || len_neu = len
           in
           if degenerate then Leaf pts
           else
