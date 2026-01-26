@@ -16,10 +16,10 @@ module type VEC3 = sig
   val z : t -> float
   (** [z v] is the z component of [v]. *)
 
-  val of_tuple : (float * float * float) -> t
+  val of_tuple : float * float * float -> t
   (** [of_tuple (x, y, z)] is [v x y z]. *)
 
-  val to_tuple : t -> (float * float * float)
+  val to_tuple : t -> float * float * float
   (** [to_tuple v] is [(x v, y v, z v)]. *)
 
   val add : t -> t -> t
@@ -48,16 +48,12 @@ module type VEC3 = sig
 end
 
 (* public interface for Oktrees *)
-module type OKTREE =
-sig
+module type OKTREE = sig
   type vec3
-  type t = {
-    leaf_size : int;
-    tree: tree;
-  }
-  and tree =
-    | Node of node
-    | Leaf of vec3 list
+
+  type t = { leaf_size : int; tree : tree }
+  and tree = Node of node | Leaf of vec3 list
+
   and node = {
     centre : vec3;
     half_size : float;
@@ -68,9 +64,9 @@ sig
     mutable swu : tree;
     mutable swd : tree;
     mutable seu : tree;
-    mutable sed : tree;
-    (* i.e. N/S E/W Up/Down *)
+    mutable sed : tree; (* i.e. N/S E/W Up/Down *)
   }
+
   val pp : Format.formatter -> t -> unit
   val pp_tree : Format.formatter -> tree -> unit
   val pp_node : Format.formatter -> node -> unit

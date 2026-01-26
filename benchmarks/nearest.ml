@@ -8,9 +8,7 @@ open Core_bench
 
 module O = Oktree.Make (V3)
 
-let clamp01 x =
-  if x < 0. then 0. else if x > 1. then 1. else x
-
+let clamp01 x = if x < 0. then 0. else if x > 1. then 1. else x
 let uniform01 rng = Random.State.float rng 1.
 
 let gaussian01 rng =
@@ -19,33 +17,31 @@ let gaussian01 rng =
   let z0 = sqrt (-2. *. log u1) *. cos (2. *. Float.pi *. u2) in
   clamp01 (0.5 +. (0.15 *. z0))
 
-let point rng dist =
-  V3.v (dist rng) (dist rng) (dist rng)
-
-let points rng dist n =
-  List.init n (fun _ -> point rng dist)
+let point rng dist = V3.v (dist rng) (dist rng) (dist rng)
+let points rng dist n = List.init n (fun _ -> point rng dist)
 
 let make_tests ~name ~dist ~seed ~sizes ~n_queries =
   let rng = Random.State.make [| seed |] in
-  List.map (fun n_points ->
-      let pts = points rng dist n_points in
-      let queries = points rng dist n_queries in
-      let tree = O.of_list pts in
-      Bench.Test.create
-        ~name:(Printf.sprintf "%s pts:%d queries:%d" name n_points n_queries)
-        (fun () ->
-           List.iter (fun q -> ignore (O.nearest tree.tree q)) queries)
-    ) sizes
+  List.map
+    (fun n_points ->
+       let pts = points rng dist n_points in
+       let queries = points rng dist n_queries in
+       let tree = O.of_list pts in
+       Bench.Test.create
+         ~name:(Printf.sprintf "%s pts:%d queries:%d" name n_points n_queries)
+         (fun () -> List.iter (fun q -> ignore (O.nearest tree.tree q)) queries))
+    sizes
 
 let main () =
-  let sizes = [256; 1024; 4096; 16384] in
+  let sizes = [ 256; 1024; 4096; 16384 ] in
   let n_queries = 256 in
-  let tests = [
-    Bench.Test.create_group ~name:"Uniform" @@
-    make_tests ~name:"uniform" ~dist:uniform01 ~seed:1 ~sizes ~n_queries;
-    Bench.Test.create_group ~name:"Normal" @@
-    make_tests ~name:"normal" ~dist:gaussian01 ~seed:2 ~sizes ~n_queries;
-  ]
+  let tests =
+    [
+      Bench.Test.create_group ~name:"Uniform"
+      @@ make_tests ~name:"uniform" ~dist:uniform01 ~seed:1 ~sizes ~n_queries;
+      Bench.Test.create_group ~name:"Normal"
+      @@ make_tests ~name:"normal" ~dist:gaussian01 ~seed:2 ~sizes ~n_queries;
+    ]
   in
   Command_unix.run (Bench.make_command tests)
 

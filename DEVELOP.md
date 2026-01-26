@@ -1,5 +1,28 @@
 # OKtree
 
+Initial set up:
+
+```sh
+opam sswitch create .
+eval $(opam env)
+opam install . --deps-only --with-dev-setup --with-test
+```
+
+### Optional: Visualise library
+
+To build the `oktree.visualise` library, install `oplot`:
+
+```sh
+opam install oplot
+dune clean && dune build
+```
+
+## VS Code
+
+1. Press `Cmd+Shift+P` (Command Palette)
+2. Type "OCaml: Select a Sandbox for this Workspace"
+3. Select the local switch: `ocaml-oktree`
+
 ## Run CI locally (act)
 
 For developing the GitHub Actions locally.

@@ -1,6 +1,5 @@
 open Popper
 open Sample.Syntax
-
 module O = Oktree.Make (Gg.V3)
 
 let pp_vec3 fmt p =
@@ -12,29 +11,20 @@ let pp_point_list fmt =
   let ppl fmt' = Format.pp_print_list ~pp_sep pp_vec3 fmt' in
   Format.fprintf fmt "[%a]" ppl
 
-
 let strict_float_range low high =
   let rec sample () =
     let* x = Sample.Float.range low high in
-    if x < low || x > high then
-      sample ()
-    else
-      Sample.return x
+    if x < low || x > high then sample () else Sample.return x
   in
   sample ()
 
 let expect_raises f exc_f pp =
-  let result_opt =
-    try exc_f f
-    with e -> Some (Error e)
-  in
+  let result_opt = try exc_f f with e -> Some (Error e) in
   match result_opt with
-  | Some (Ok a) ->
-    fail @@ Format.asprintf "Unexpected result: %a" pp a
+  | Some (Ok a) -> fail @@ Format.asprintf "Unexpected result: %a" pp a
   | Some (Error e) ->
-    fail @@ Printf.sprintf "Unexpected error: %s" (Printexc.to_string e) 
-  | None -> pass  (* the correct result *)
-
+    fail @@ Printf.sprintf "Unexpected error: %s" (Printexc.to_string e)
+  | None -> pass (* the correct result *)
 
 let sample_ggv3 low high =
   let* x = strict_float_range low high in
@@ -42,9 +32,7 @@ let sample_ggv3 low high =
   let* z = strict_float_range low high in
   Sample.return (Gg.V3.v x y z)
 
-let compare_ggv3 =
-  Comparator.make Gg.V3.compare Gg.V3.pp
-
+let compare_ggv3 = Comparator.make Gg.V3.compare Gg.V3.pp
 let sort_ggv3_list = List.sort Gg.V3.compare
 
 (* let compare_ggv3_opt =
@@ -87,22 +75,22 @@ let nearest points p =
     raise @@ Invalid_argument "nearest oracle: points list was empty"
   else
     let sorted =
-      List.map (fun p' -> (distance p' p, p')) points
-      |> List.sort compare
+      List.map (fun p' -> (distance p' p, p')) points |> List.sort compare
     in
-    let* _ = 
-      Sample.log_key_value "Oracle" @@ (Format.asprintf "%a" pp_point_distance_list sorted)
+    let* _ =
+      Sample.log_key_value "Oracle"
+      @@ Format.asprintf "%a" pp_point_distance_list sorted
     in
     let _, result = List.hd sorted in
     Sample.return result
 
-let from_tuples l = List.map (fun (x,y,z) -> Gg.V3.v x y z) l
+let from_tuples l = List.map (fun (x, y, z) -> Gg.V3.v x y z) l
 
 (* TESTS *)
 
 let test_of_list =
   test @@ fun () ->
-  let expected = [Gg.V3.ox; Gg.V3.oy; Gg.V3.oz] |> sort_ggv3_list in
+  let expected = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] |> sort_ggv3_list in
   let root = O.of_list expected in
   let actual = O.to_list root.tree |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) actual expected
@@ -110,8 +98,7 @@ let test_of_list =
 let test_of_list_sample_nonempty =
   test @@ fun () ->
   let* points =
-    Sample.with_log
-      "Sample points"
+    Sample.with_log "Sample points"
       (fun fmt points' -> pp_point_list fmt points')
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
@@ -127,14 +114,16 @@ let test_nearest_handpicked_failures =
     let root = O.of_list points in
     let* expected = nearest points target in
     let result = O.nearest root.tree target in
-    let* _ = 
+    let* _ =
       Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
     in
-    let* _ = 
-      Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
+    let* _ =
+      Sample.log_key_value "Expected distance"
+      @@ Float.to_string (distance target expected)
     in
-    let* _ = 
-      Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
+    let* _ =
+      Sample.log_key_value "Result distance"
+      @@ Float.to_string (distance target result)
     in
     equal compare_ggv3 result expected
   in
@@ -148,38 +137,69 @@ let test_nearest_handpicked_failures =
          Gg.V3.v 0.3333 0.41 0.6667); *)
       (* ([Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406],
          Gg.V3.v 0.3333 0.41 0.6667); *)
-      (from_tuples [(0.000000, 0.135509, 0.558065); (0.000000, 0.000000, 0.251862); (0.000000, 0.000000, 0.309942); (0.000000, 0.818889, 0.000000); (0.558965, 0.114604, 0.000000); (0.000000, 0.000000, 0.000000); (0.000000, 0.000000, 0.297470); (0.000000, 0.000000, 0.449710); (0.000000, 0.000000, 0.302328); (0.497573, 0.000000, 0.000000); (0.000000, 0.000000, 0.449739); (0.000000, 0.000000, 0.302581); (0.000000, 0.933309, 0.000000); (0.000000, 0.000000, 0.000000); (0.000000, 0.000000, 0.321395); (0.000000, 0.000000, 0.407899); (0.032235, 0.087385, 0.615754); (0.000000, 0.373305, 0.000000); (0.000000, 0.000000, 0.432156); (0.000000, 0.000000, 0.000000); (0.000000, 0.000000, 0.247959); (0.000000, 0.000000, 0.361187); (0.000000, 0.000000, 0.000000); (0.000000, 0.000000, 0.483175); (0.000000, 0.000000, 0.367874); (0.000000, 0.000000, 0.445183); (0.000000, 0.000000, 0.000000); (0.000000, 0.000000, 0.306433)],
-       Gg.V3.v 0.3333 0.41 0.6667);
+      ( from_tuples
+          [
+            (0.000000, 0.135509, 0.558065);
+            (0.000000, 0.000000, 0.251862);
+            (0.000000, 0.000000, 0.309942);
+            (0.000000, 0.818889, 0.000000);
+            (0.558965, 0.114604, 0.000000);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.297470);
+            (0.000000, 0.000000, 0.449710);
+            (0.000000, 0.000000, 0.302328);
+            (0.497573, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.449739);
+            (0.000000, 0.000000, 0.302581);
+            (0.000000, 0.933309, 0.000000);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.321395);
+            (0.000000, 0.000000, 0.407899);
+            (0.032235, 0.087385, 0.615754);
+            (0.000000, 0.373305, 0.000000);
+            (0.000000, 0.000000, 0.432156);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.247959);
+            (0.000000, 0.000000, 0.361187);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.483175);
+            (0.000000, 0.000000, 0.367874);
+            (0.000000, 0.000000, 0.445183);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.306433);
+          ],
+        Gg.V3.v 0.3333 0.41 0.6667 );
     ]
   in
-  suite @@ List.mapi (fun i (points, target) ->
-      (Printf.sprintf "%i" i), (make points target)
-    ) args
+  suite
+  @@ List.mapi
+    (fun i (points, target) -> (Printf.sprintf "%i" i, make points target))
+    args
 
 let test_nearest_sample_nonempty =
-  let configs = [Config.num_samples 5000; Config.seed [1]] in
+  let configs = [ Config.num_samples 5000; Config.seed [ 1 ] ] in
   test ~config:(Config.all configs) @@ fun () ->
   let* points =
-    Sample.with_log
-      "Sample points"
-      pp_point_list
+    Sample.with_log "Sample points" pp_point_list
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
   let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* _ = 
+  let* _ =
     Sample.log_key_value "Length" (List.length points |> Int.to_string)
   in
   let root = O.of_list points in
   let* expected = nearest points target in
   let result = O.nearest root.tree target in
-  let* _ = 
+  let* _ =
     Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
   in
-  let* _ = 
-    Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
+  let* _ =
+    Sample.log_key_value "Expected distance"
+    @@ Float.to_string (distance target expected)
   in
-  let* _ = 
-    Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
+  let* _ =
+    Sample.log_key_value "Result distance"
+    @@ Float.to_string (distance target result)
   in
   equal compare_ggv3 result expected
 
@@ -190,17 +210,16 @@ let test_nearest_sample_empty =
   let exc_f f = try Some (Ok (f ())) with Not_found -> None in
   expect_raises (fun () -> O.nearest root.tree p) exc_f Gg.V3.pp
 
-
 (* RUNNER *)
 
-let of_list_suite = 
+let of_list_suite =
   suite
     [
       ("3 static points", test_of_list);
       ("sampled points, nonempty", test_of_list_sample_nonempty);
     ]
 
-let nearest_suite = 
+let nearest_suite =
   suite
     [
       ("handpicked failures", test_nearest_handpicked_failures);
@@ -208,11 +227,5 @@ let nearest_suite =
       ("sampled points, []", test_nearest_sample_empty);
     ]
 
-let tests =
-  suite
-    [
-      ("of_list", of_list_suite);
-      ("nearest", nearest_suite);
-    ]
-
+let tests = suite [ ("of_list", of_list_suite); ("nearest", nearest_suite) ]
 let () = run tests
