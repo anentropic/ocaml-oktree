@@ -28,7 +28,7 @@ dune clean && dune build
 Run tests with:
 
 ```sh
-dune runtest --profile test
+dune test
 ```
 
 ## Run CI locally (act)
