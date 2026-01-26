@@ -1,15 +1,20 @@
 name: Release
 
 on:
-  push:
-    branches:
-      - main
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types: 
+      - completed
+
 
 permissions:
   contents: write
 
 jobs:
+  # TODO: should release be when tag is pushed instead of all pushes to main?
   release:
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -48,3 +53,5 @@ jobs:
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
+
+    # TODO add steps to publish to opam

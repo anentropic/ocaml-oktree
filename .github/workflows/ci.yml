@@ -24,3 +24,6 @@ jobs:
 
       - name: Run tests
         run: opam exec -- dune test
+
+  # TODO add linting job using pre-commit config
+
