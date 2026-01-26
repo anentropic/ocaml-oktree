@@ -210,6 +210,92 @@ let test_nearest_sample_empty =
   let exc_f f = try Some (Ok (f ())) with Not_found -> None in
   expect_raises (fun () -> O.nearest (O.tree_of root) p) exc_f Gg.V3.pp
 
+(* Edge case tests for empty trees and basic operations *)
+
+let test_empty_tree =
+  test @@ fun () ->
+  (* Create an empty tree and verify it can be created without error *)
+  let root = O.of_list [] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree in
+  equal Comparator.(list compare_ggv3) [] points
+
+let test_single_point =
+  test @@ fun () ->
+  (* Test tree with a single point *)
+  let pt = Gg.V3.v 0.5 0.5 0.5 in
+  let root = O.of_list [ pt ] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree in
+  equal Comparator.(list compare_ggv3) [ pt ] points
+
+let test_duplicate_points =
+  test @@ fun () ->
+  (* Test tree with duplicate points *)
+  let pt = Gg.V3.zero in
+  let root = O.of_list [ pt; pt; pt ] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) [ pt; pt; pt ] points
+
+let test_nearest_single_point =
+  test @@ fun () ->
+  (* Test nearest on tree with single point *)
+  let pt = Gg.V3.v 0.1 0.2 0.3 in
+  let root = O.of_list [ pt ] in
+  let tree = O.tree_of root in
+  let query = Gg.V3.v 0.5 0.5 0.5 in
+  let result = O.nearest tree query in
+  equal compare_ggv3 pt result
+
+let test_invalid_leaf_size =
+  test @@ fun () ->
+  (* Test that invalid leaf_size parameters are handled *)
+  let* leaf_size = Sample.one_value_of [ 0; -1; -10 ] in
+  let points = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] in
+  (* The implementation should either handle this gracefully or raise an error *)
+  (* For now, we test that creating with invalid leaf_size doesn't crash *)
+  let root = O.of_list ~leaf_size points in
+  let tree = O.tree_of root in
+  let result_points = O.to_list tree |> sort_ggv3_list in
+  (* Even with invalid leaf_size, all points should be preserved *)
+  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result_points
+
+let test_insert_to_empty =
+  test @@ fun () ->
+  (* Test inserting a point into an empty tree *)
+  let root = O.of_list [] in
+  let pt = Gg.V3.v 0.5 0.5 0.5 in
+  let new_tree = O.insert root pt in
+  let points = O.to_list new_tree in
+  equal Comparator.(list compare_ggv3) [ pt ] points
+
+let test_insert_multiple =
+  test @@ fun () ->
+  (* Test inserting multiple points one by one *)
+  let pt1 = Gg.V3.v 0.1 0.1 0.1 in
+  let root1 = O.of_list [ pt1 ] in
+  let pt2 = Gg.V3.v 0.9 0.9 0.9 in
+  let tree2 = O.insert root1 pt2 in
+  let points = O.to_list tree2 |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) (sort_ggv3_list [ pt1; pt2 ]) points
+
+let test_points_at_boundaries =
+  test @@ fun () ->
+  (* Test with points at coordinate boundaries *)
+  let points =
+    [
+      Gg.V3.v 0. 0. 0.;
+      Gg.V3.v 1. 1. 1.;
+      Gg.V3.v 0. 1. 0.;
+      Gg.V3.v 1. 0. 1.;
+    ]
+  in
+  let root = O.of_list points in
+  let tree = O.tree_of root in
+  let result = O.to_list tree |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result
+
 (* RUNNER *)
 
 let of_list_suite =
@@ -225,7 +311,26 @@ let nearest_suite =
       ("handpicked failures", test_nearest_handpicked_failures);
       ("sampled points, nonempty", test_nearest_sample_nonempty);
       ("sampled points, []", test_nearest_sample_empty);
+      ("single point", test_nearest_single_point);
     ]
 
-let tests = suite [ ("of_list", of_list_suite); ("nearest", nearest_suite) ]
+let edge_cases_suite =
+  suite
+    [
+      ("empty tree", test_empty_tree);
+      ("single point", test_single_point);
+      ("duplicate points", test_duplicate_points);
+      ("insert to empty", test_insert_to_empty);
+      ("insert multiple", test_insert_multiple);
+      ("points at boundaries", test_points_at_boundaries);
+      ("invalid leaf_size", test_invalid_leaf_size);
+    ]
+
+let tests =
+  suite
+    [
+      ("of_list", of_list_suite);
+      ("nearest", nearest_suite);
+      ("edge_cases", edge_cases_suite);
+    ]
 let () = run tests
