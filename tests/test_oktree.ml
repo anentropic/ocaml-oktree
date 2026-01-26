@@ -108,7 +108,8 @@ let test_of_list_sample_nonempty =
   ignore @@ equal Comparator.int (List.length expected) (List.length actual);
   equal Comparator.(list compare_ggv3) actual expected
 
-let test_nearest_handpicked_failures =
+let test_nearest_handpicked =
+  (* Hand-picked points + target sets *)
   let make points target =
     test @@ fun () ->
     let root = O.of_list points in
@@ -129,14 +130,17 @@ let test_nearest_handpicked_failures =
   in
   let args =
     [
-      (* ([Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2],
-         Gg.V3.v 0.24 0.24 0.24); *)
-      (* ([Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263],
-         Gg.V3.v 0.3333 0.41 0.6667); *)
-      (* ([Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422],
-         Gg.V3.v 0.3333 0.41 0.6667); *)
-      (* ([Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406],
-         Gg.V3.v 0.3333 0.41 0.6667); *)
+      ([Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2],
+       Gg.V3.v 0.24 0.24 0.24);
+      ([Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      ([Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      ([Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      (*
+        Copilot added this set, duplicates and all. Presumably to capture PBT cases that failed during dev:
+      *)
       ( from_tuples
           [
             (0.000000, 0.135509, 0.558065);
@@ -308,7 +312,7 @@ let of_list_suite =
 let nearest_suite =
   suite
     [
-      ("handpicked failures", test_nearest_handpicked_failures);
+      ("handpicked", test_nearest_handpicked);
       ("sampled points, nonempty", test_nearest_sample_nonempty);
       ("sampled points, []", test_nearest_sample_empty);
       ("single point", test_nearest_single_point);
