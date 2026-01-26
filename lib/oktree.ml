@@ -228,16 +228,16 @@ module Make =
         let dy = V3.y pt -. py in
         let dz = V3.z pt -. pz in
         (dx *. dx) +. (dy *. dy) +. (dz *. dz)
-      let rec to_list' pts children =
+      let rec to_list' children =
         List.concat_map
           (function
-            | _, Leaf pts' -> pts @ pts'
-            | _, Node node' -> to_list' pts (children_of_node node'))
+            | _, Leaf pts' -> pts'
+            | _, Node node' -> to_list' (children_of_node node'))
           children
 
       let to_list = function
         | Leaf points -> points
-        | Node node -> to_list' [] (children_of_node node)
+        | Node node -> to_list' (children_of_node node)
 
     (*
     NOTE: the returned 'octant' no longer represents an octant
