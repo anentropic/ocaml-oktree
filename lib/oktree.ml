@@ -159,13 +159,16 @@ module Make =
     (*
     [leaf_size] is max points per leaf before splitting
     so we recursively split on the centre point of the *points* in each octant
-    NOTE: as per the 'hask' implementation, cannot insert to existing node, only leaf
+    NOTE: cannot insert to existing node, only leaf
 
-    TODO: we inherit this bug when no. of duplicate points > leaf_size
-    https://github.com/BioHaskell/octree/issues/14
+    NOTE: When duplicate points exceed [leaf_size], we detect the degenerate case
+    (all points in same octant) and stop splitting, leaving an oversized leaf.
+    See: https://github.com/BioHaskell/octree/issues/14
 
     Also... duplicate points will skew the calculation of [find_centre] since
-    it is finding the mean point
+    it is finding the mean point.
+
+    (Avoid adding duplicate points to the tree if possible)
   *)
       let rec from_list' leaf_size pts =
         let len = List.length pts in
