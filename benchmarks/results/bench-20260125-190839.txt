@@ -1,0 +1,13 @@
+Estimated testing time 24s (8 benchmarks x 3s). Change using '-quota'.
+┌───────────────────────────────────────┬────────────┬────────────┬──────────┬──────────┬────────────┐
+│ Name                                  │   Time/Run │    mWd/Run │ mjWd/Run │ Prom/Run │ Percentage │
+├───────────────────────────────────────┼────────────┼────────────┼──────────┼──────────┼────────────┤
+│ Uniform/uniform pts:256 queries:256   │   181.19us │   181.75kw │   13.69w │   13.69w │      3.82% │
+│ Uniform/uniform pts:1024 queries:256  │   347.54us │   315.64kw │   23.31w │   23.31w │      7.33% │
+│ Uniform/uniform pts:4096 queries:256  │   424.06us │   376.79kw │   26.16w │   26.16w │      8.94% │
+│ Uniform/uniform pts:16384 queries:256 │   328.84us │   282.39kw │   20.32w │   20.32w │      6.93% │
+│ Normal/normal pts:256 queries:256     │   571.63us │   592.29kw │   40.24w │   40.24w │     12.05% │
+│ Normal/normal pts:1024 queries:256    │ 1_490.01us │ 1_368.50kw │   90.52w │   90.52w │     31.41% │
+│ Normal/normal pts:4096 queries:256    │ 3_863.05us │ 3_442.71kw │  221.17w │  221.17w │     81.45% │
+│ Normal/normal pts:16384 queries:256   │ 4_743.00us │ 3_563.82kw │  213.01w │  213.01w │    100.00% │
+└───────────────────────────────────────┴────────────┴────────────┴──────────┴──────────┴────────────┘

@@ -13,21 +13,27 @@
  (name oktree)
  (synopsis "OKtree: A simple octree implementation in OCaml")
  (description "A simple octree implementation in OCaml, intended to efficiently find nearest match for an arbitrary point among a set of points in 3D coordinate space.")
+ (depopts
+  ; optional: visualise library deps
+  ; opam install oplot
+  oplot)
  (depends
-  (ocaml (>= 4.10))
-  (psq (>= 0.2))
-  ; test deps
+  ; core deps
+  (ocaml (>= 5.3))
+  ppx_deriving
+
+  ; test and benchmark deps
+  ; opam install . --deps-only --with-test
   (ppx_deriving_popper (and :with-test (>= 0.1.1)))
   (gg (and :with-test (>= 1.0)))
+  (core_bench (and :with-test (>= 0.15.0)))
+  (core_unix (and :with-test (>= 0.15.0)))
 
-  ; benchmark deps (to be installed manually)
-  ; - core_bench
-  ; - core_unix
-  ; - owl
+  ; dev deps (for pre-commit hooks: formatting and build)
+  ; opam install . --deps-only --with-dev-setup
+  (ocamlformat :with-dev-setup)
+  (ocp-indent :with-dev-setup)
 
-  ; dev deps (to be installed manually)
-  ; - ocaml-lsp-server
-  ; - ocp-indent
-  ; - ocamlformat
-  ; - utop
+  ; docs
+  (odoc :with-doc)
  ))

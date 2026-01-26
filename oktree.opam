@@ -11,12 +11,17 @@ homepage: "https://github.com/anentropic/ocaml-oktree"
 bug-reports: "https://github.com/anentropic/ocaml-oktree/issues"
 depends: [
   "dune" {>= "3.5"}
-  "ocaml" {>= "4.10"}
-  "psq" {>= "0.2"}
+  "ocaml" {>= "5.3"}
+  "ppx_deriving"
   "ppx_deriving_popper" {with-test & >= "0.1.1"}
   "gg" {with-test & >= "1.0"}
+  "core_bench" {with-test & >= "0.15.0"}
+  "core_unix" {with-test & >= "0.15.0"}
+  "ocamlformat" {with-dev-setup}
+  "ocp-indent" {with-dev-setup}
   "odoc" {with-doc}
 ]
+depopts: ["oplot"]
 build: [
   ["dune" "subst"] {dev}
   [

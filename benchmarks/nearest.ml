@@ -1,83 +1,48 @@
 open Gg
-open Owl
 open Core_bench
 
 (*
-  dune build
-  dune exec benchmarks/nearest.exe -quota 3 -stabilize-gc
-  or
-  _build/default/benchmarks/nearest.exe -quota 3 -stabilize-gc
-
-  (if you get "Regression failed ... because the predictors were linearly
-  dependent" when using a low quota try just up the quota, seems to be that
-  -quota 3 is about the minimum that works currently)
+  dune build --profile=test
+  dune exec --profile=test benchmarks/nearest.exe -- -quota 3 -stabilize-gc
 *)
 
 module O = Oktree.Make (V3)
 
-let points dist n =
-  let values = dist 3 n in
-  List.init n (fun i ->
-      match Mat.col values i |> Mat.to_array with
-      | [|x; y; z|] -> V3.v x y z
-      | _ -> raise @@ Invalid_argument "Wrong shape matrix"
-    )
+let clamp01 x = if x < 0. then 0. else if x > 1. then 1. else x
+let uniform01 rng = Random.State.float rng 1.
 
-let target () = List.hd @@ points Mat.uniform 1
+let gaussian01 rng =
+  let u1 = Random.State.float rng 1. in
+  let u2 = Random.State.float rng 1. in
+  let z0 = sqrt (-2. *. log u1) *. cos (2. *. Float.pi *. u2) in
+  clamp01 (0.5 +. (0.15 *. z0))
 
-let distance a b = V3.sub a b |> V3.norm
+let point rng dist = V3.v (dist rng) (dist rng) (dist rng)
+let points rng dist n = List.init n (fun _ -> point rng dist)
 
-(* TESTS *)
-
-let test_nearest pts targets depth =
-  let trees = List.map (O.of_list depth) pts in
-  Core.Staged.stage @@ (fun () ->
-      List.map (fun tree ->
-          List.map (fun pt -> O.nearest tree pt) targets
-        ) trees
-    )
-
-let test_control n =
-  let pt = target () in
-  let pts = points Mat.uniform n in
-  fun () ->
-    List.map (fun p' -> (distance p' pt, p')) @@ pts
-    |> List.sort compare
-    |> List.hd
-    |> snd
+let make_tests ~name ~dist ~seed ~sizes ~n_queries =
+  let rng = Random.State.make [| seed |] in
+  List.map
+    (fun n_points ->
+       let pts = points rng dist n_points in
+       let queries = points rng dist n_queries in
+       let tree = O.of_list pts in
+       Bench.Test.create
+         ~name:(Printf.sprintf "%s pts:%d queries:%d" name n_points n_queries)
+         (fun () -> List.iter (fun q -> ignore (O.nearest (O.tree_of tree) q)) queries))
+    sizes
 
 let main () =
-  let n_targets = 100 in
-  let targets = List.init n_targets (fun _ -> target ()) in
-  let make_tests dist =
-    List.map (fun (pts_per_tree, n_trees, depths) ->
-        let pts = List.init n_trees (fun _ -> points dist pts_per_tree) in
-        Bench.Test.create_indexed
-          ~name:(Printf.sprintf "pts:%i n:%i depth" pts_per_tree (n_trees * n_targets))
-          ~args:depths
-        @@ test_nearest pts targets;
-      ) [
-      (256, 25, [1; 2; 3; 4; 5]);
-      (1024, 25, [2; 3; 4; 5; 6]);
-      (65536, 8, [4; 5; 6]);
-      (2097152, 1, [5; 6; 7]);
+  let sizes = [ 256; 1024; 4096; 16384 ] in
+  let n_queries = 256 in
+  let tests =
+    [
+      Bench.Test.create_group ~name:"Uniform"
+      @@ make_tests ~name:"uniform" ~dist:uniform01 ~seed:1 ~sizes ~n_queries;
+      Bench.Test.create_group ~name:"Normal"
+      @@ make_tests ~name:"normal" ~dist:gaussian01 ~seed:2 ~sizes ~n_queries;
     ]
   in
-  (*
-    - points in a 'uniform' distribution are completely random, although can
-     look 'clumpy' to the eye
-    - 'gaussian' or 'normal' distribution is denser in the middle of the range
-      and has more sparse outliers
-  *)
-  ignore @@ Command_unix.run (Bench.make_command [
-      Bench.Test.create_group ~name:"Uniform dist" @@ make_tests Mat.uniform;
-      Bench.Test.create_group ~name:"Normal dist" @@ make_tests Mat.gaussian;
-      Bench.Test.create_group ~name:"Control (list cmp + sort)" [
-        Bench.Test.create ~name:"pts:256" @@ test_control 256;
-        Bench.Test.create ~name:"pts:1024" @@ test_control 1024;
-        (* Bench.Test.create ~name:"pts:65536" @@ test_control 65536; *)
-        (* Bench.Test.create ~name:"pts:2097152 depth" @@ test_control 2097152; *)
-      ];
-    ])
+  Command_unix.run (Bench.make_command tests)
 
 let () = main ()

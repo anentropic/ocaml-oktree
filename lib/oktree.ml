@@ -5,32 +5,36 @@
   the octree will be an 'axis-aligned' cube
   and all three axes will have the same scale
 *)
-module Make = functor (V3 : Oktree_intf.VEC3) ->
-struct
-  type vec3 = V3.t
+module Make =
+  functor
+    (V3 : Oktree_intf.VEC3)
+    ->
+    struct
+      type vec3 = V3.t
 
-  (* let pp_vec3 = V3.pp *)
-  let pp_vec3 fmt p =
-    let x, y, z = V3.to_tuple p in
-    Format.fprintf fmt "(%f, %f, %f)" x y z
+      (* let pp_vec3 = V3.pp *)
+      let pp_vec3 fmt p =
+        let x, y, z = V3.to_tuple p in
+        Format.fprintf fmt "(%f, %f, %f)" x y z
 
+      type t = { leaf_size : int; tree : tree }
+      and tree = Node of node | Leaf of vec3 list
 
-  type t = {
-    depth: int;   (* TODO: can this be eliminated? *)
-    size: float;  (* TODO: can this be eliminated? *)
-    root: node;
-  }
-  and node = {
-    mutable children: children;
-    level: int;  (* root is 0 *)
-    id : int;
-    origin: vec3;
-  }
-  and children =
-    | Nodes of node option array
-    | Points of vec3 list 
-  [@@deriving show]
-  (*
+      and node = {
+        centre : vec3;
+        half_size : float;
+        mutable nwu : tree;
+        mutable nwd : tree;
+        mutable neu : tree;
+        mutable ned : tree;
+        mutable swu : tree;
+        mutable swd : tree;
+        mutable seu : tree;
+        mutable sed : tree; (* i.e. N/S E/W Up/Down *)
+      }
+      [@@deriving show, map, fold, iter]
+
+    (*
   Nodes array structure:
     octant  index  bits
     x0_y0_z0: 0 | 0 0 0
@@ -43,403 +47,420 @@ struct
     x1_y1_z1: 7 | 1 1 1
   *)
 
-  let max_depth = 20  (* see: [id_to_string] *)
+      let max_depth = 20 (* see: [id_to_string] *)
+      let default_leaf_size = 16
+      let repeat_3 a = (a, a, a)
 
-  let default_origin = V3.of_tuple (0., 0., 0.)
-  let default_size = 1.
+      let tmap8 f (swd, sed, nwd, ned, swu, seu, nwu, neu) =
+        (f swd, f sed, f nwd, f ned, f swu, f seu, f nwu, f neu)
 
-  let empty_node_children () = Nodes (Array.make 8 None)
-  let empty_leaf_children () = Points []
+      type octant = SWD | SED | NWD | NED | SWU | SEU | NWU | NEU
+      [@@deriving eq, ord, enum, show, iter]
 
-  let root_children = function
-    | d when d = 1 -> empty_leaf_children ()
-    | _ -> empty_node_children ()
+      let all_octants =
+        List.init (max_octant + 1) (fun i -> octant_of_enum i |> Option.get)
 
-  (* init an octree root *)
-  let empty ?(size=default_size) ?(origin=default_origin) depth =
-    match depth with
-    | d when d < 1 -> raise @@ Invalid_argument "depth must be >= 1"
-    | d when d > max_depth ->
-      raise @@ Invalid_argument (Printf.sprintf "depth must be <= %i" max_depth)
-    | _ ->
-      let root =
-        {
-          children = root_children depth;
-          level = 0;
-          id = 0;
-          origin;
-        }
-      in
-      {
-        depth;
-        size;
-        root;
-      }
-
-  let repeat_3 a = (a, a, a)
-
-  let octant_size root_size level = root_size /. 2. ** (Float.of_int level)
-
-  (*
-    get index of child octant within [parent] that would contain [p]
-    NOTE: result won't be meaningful if [p] is outside [parent]
-  *)
-  let octant_index_for_p root_size parent p =
-    let subdiv = octant_size root_size (parent.level + 1) in
-    let mask getter mask =
-      let mid = getter parent.origin +. subdiv in
-      match getter p with
-      | a when a < mid -> 0
-      | _ -> mask
-    in
-    (mask V3.x 4) lor (mask V3.y 2) lor (mask V3.z 1)
-
-  (* get offset value for child octant at [index] in [parent] *)
-  let octant_offset root_size parent index =
-    let offset_size = octant_size root_size (parent.level + 1) in
-    let offset getter mask =
-      match index land mask with  (* 0 or 1 *)
-      | 0 -> getter parent.origin
-      | _ -> getter parent.origin +. offset_size
-    in
-    V3.of_tuple ((offset V3.x 4), (offset V3.y 2), (offset V3.z 1))
-
-  let id_to_level id =
-    (Float.log2 (Float.of_int @@ id + 1)) /. 3.
-    |> Float.ceil
-    |> Int.of_float
-
-  (*
-    id_to_path 234 |> Seq.map id_to_string |> List.of_seq;;
-    - : string list = ["010"; "101010"; "011101010"]
-
-    TODO: this doesn't look like I was intending, the shorter ones
-    are truncated from the wrong end?
-
-    I think this is what we want, each path uniquely locates
-    the octant or level-parent of the octant matching [id]
-
-    alternatively, single 'column' masks are:
-    <this level mask> - <prev level mask>
-    e.g.
-    level 2 column mask is: 63 - 7 = 56    (0b000111000)
-    level 3 column mask is: 511 - 63 = 448 (0b111000000)
-  *)
-  let id_to_path level id =
-    let mask level = Int.of_float (8. ** (Float.of_int level)) - 1 in
-    Seq.unfold (function
-        | l when l <= level -> Some (id land mask l, l + 1)
-        | _ -> None
-      ) 1
-
-  (*
-    NOTE:
-    this function and also use of bit-shifting elsewhere effectively
-    puts a limit on max id value, and thus max level depth of the tree.
-    See https://v2.ocaml.org/api/Int.html#VALshift_left)
-    "The result is unspecified if n < 0 or n > Sys.int_size"
-
-    On a 64 bit system:
-
-      Sys.int_size = 63
-      Int.max_int = 4611686018427387903
-      Int.max_int |> Utils.log2 = 62
-      2. ** 62. |> Int.of_float = -4611686018427387904  (overflow!!)
-      2. ** 62. |> Int64.of_float = 4611686018427387904L
-      2. ** 61. |> Int.of_float = 2305843009213693952   (no prob)
-
-    In our case was also want a bit length that is multiple of 3.
-    So depth=20 (60-bit ids) seems the limit using this approach.
-    That gives 1_152_921_504_606_846_976 or ~1 quintillion octants.
-  *)
-  let id_to_string =
-    (* each call to fun can re-use same buffer, this is basically a decorator *)
-    let buf = Bytes.create Sys.int_size in
-    let maxbits = Sys.int_size - 1 in
-    fun level n ->
-      if level = 0 then "" else
-        begin
-          for i = 0 to maxbits do
-            let pos = maxbits - i in
-            Bytes.set buf pos (if n land (1 lsl i) != 0 then '1' else '0')
-          done;
-          (* truncate from the left to a multiple of 3 bit length *)
-          (* let len =
-             let l = Utils.log2 (level + 1) |> Float.of_int in
-             ((l /. 3.) |> Float.ceil) *. 3.
-             |> Int.of_float
-             in *)
-          let len = level * 3 in
-          Bytes.sub_string buf (maxbits - len + 1) len
-        end
-
-  let id_to_path_str level id =
-    Seq.mapi (fun i -> id_to_string (i + 1)) (id_to_path level id)
-    |> List.of_seq
-    |> String.concat ","
-
-  (* add a new leaf to the octree (updates root in place) *)
-  let add tree p =
-    let rec construct parent p =
-      match parent.children with
-      | Nodes nodes ->
-        (* inner node *)
-        let level = parent.level + 1 in
-        let index = octant_index_for_p tree.size parent p in
-        let origin = octant_offset tree.size parent index in
-        let id = (parent.id lsl 3) lor index in
-        let children =
-          match level with
-          | l when l < tree.depth -> empty_node_children ()
-          | _ -> empty_leaf_children ()
-        in
-        let node = begin
-          match Array.get nodes index with
-          | Some n -> n  (* target node already exists *)
-          | None ->
-            {
-              children;
-              level;
-              id;
-              origin;  (* relative to root *)
-            }
-        end
-        in
-        let node = construct node p in
-        Array.set nodes index (Some node);
-        parent
-      | Points points ->
-        (* leaf *)
-        parent.children <- Points (List.cons p points);
-        parent
-    in
-    ignore @@ construct tree.root p
-
-  let of_list ?(size=default_size) ?(origin=default_origin) depth l =
-    let tree = empty ~size ~origin depth in
-    List.iter (add tree) l;
-    tree
-
-  let of_seq ?(size=default_size) ?(origin=default_origin) depth s =
-    let tree = empty ~size ~origin depth in
-    Seq.iter (add tree) s;
-    tree
-
-  (*
-    recursively collect the points below a given octant
-    (I'm not sure this has much utility beyond debugging)
-  *)
-  let points node =
-    let rec collect points children =
-      match children with
-      | Nodes nodes ->
-        Array.fold_left (fun points' child ->
-            match child with
-            | Some node -> collect points' node.children
-            | None -> points'
-          ) points nodes
-      | Points points' -> List.append points points'
-    in
-    collect [] node.children
-
-  (* Euclidean distance. Always positive (i.e. has no direction) *)
-  let distance a b = V3.sub a b |> V3.norm
-  (* Possible optimisation: https://stackoverflow.com/a/1678481/202168
-     if we only need to 'sort' and don't care about magnitude of
-     distances then the sqrt step is superfluous (I think that
-     would be just V3.norm2) *)
-
-  let box origin size =
-    let x0, y0, z0 = V3.to_tuple origin in
-    let x1, y1, z1 = x0 +. size, y0 +. size, z0 +. size in
-    Array.init 8 (function
-        | 0 -> V3.of_tuple (x0, y0, z0)
-        | 1 -> V3.of_tuple (x0, y0, z1)
-        | 2 -> V3.of_tuple (x0, y1, z0)
-        | 3 -> V3.of_tuple (x0, y1, z1)
-        | 4 -> V3.of_tuple (x1, y0, z0)
-        | 5 -> V3.of_tuple (x1, y0, z1)
-        | 6 -> V3.of_tuple (x1, y1, z0)
-        | 7 -> V3.of_tuple (x1, y1, z1)
-        | _ -> raise Not_found
-      )
-
-  type v3_array = vec3 array [@@deriving show]
-  type v3_list = vec3 list [@@deriving show]
-
-  (*
-    Find the distance from [p] to the nearest face, edge or vertex of [octant]
-    Method from: https://math.stackexchange.com/a/2133235/181250
-  *)
-  let octant_surface_distance root_size octant p =
     (*
-      We want to translate our octant so that its centre lies at 0,0
-      (makes the big if/else below simpler)
+    joinStep :: (Enum a1, Enum a3, Enum a2, Enum a) => (a1, a2, a3) -> a
+    joinStep (cx, cy, cz) = toEnum (fromEnum cx + 2 * fromEnum cy + 4 * fromEnum cz)
+  *)
+      let octant_of_flags (cx, cy, cz) =
+        let o = Bool.to_int cx + (2 * Bool.to_int cy) + (4 * Bool.to_int cz) in
+        octant_of_enum @@ o |> Option.get
 
-      We don't actually translate the octant, but rather the point [p]
-      and then calculate surface distance as if octant was translated.
+      let octant_to_flags oct =
+        let a = octant_to_enum oct in
+        (a land 1 = 1, a land 2 = 2, a land 4 = 4)
 
-      TODO: scaled octant offsets could be pre-calculated, the scalings
-      are different for each octant but they are static. However...
-      This answer https://stackoverflow.com/a/48330314/202168 suggests that
-      with large numbers of points (10k) it's faster *not* to precalculate
-      because reducing memory size of nodes improves cpu cache usage.
-      It also strongly recommends not storing points in the leaves, and
-      perhaps not nodes within ndoes at all, instead these should be indexes
-      into a flat top-level data structure, again for better cpu cache usage.
-    *)
-    let octsize = octant_size root_size octant.level in
-    let s = octsize /. 2. in
-    (* Format.printf "| s: %f\n" s; *)
-    let oct_centre_offset = V3.add octant.origin (V3.of_tuple (repeat_3 s)) in
-    (* root origin is a distance from 0,0, octant.origin is relative to root origin *)
-    let offset = V3.sub (V3.of_tuple (0., 0., 0.)) oct_centre_offset in
-    let p' = V3.add p offset in
     (*
-      For this calculation the point [p] has one of 27 possible positions
-      in relation to the octant, which correspond to the 26 adjacent octants
-      plus potentially being within the target octant.
-      26 adjacent = 6 face:face + 8 vertex:vertex + 12 edge:edge
-      By taking |abs| values these are collapsed down to the 7+1 cases below,
-      finding the distance to nearest face, vertex or edge as appropriate.
-      (I think these are Euclidean distance too)
-    *)
-    let x, y, z = p' |> V3.map abs_float |> V3.to_tuple in
-    if x <= s then
-      if y <= s then
-        (* without the max this would give negative distance in case where
-            p is in octant - that would actually still work with our pq *)
-        begin
-          (* face *)
-          max 0. (z -. s)  (* 0 if p in octant, all other cases return > 0 *)
-        end
-      else
-      if z <= s then
-        begin
-          (* face *)
-          y -. s
-        end
-      else
-        begin
-          (* edge *)
-          sqrt ((y -. s) ** 2. +. (z -. s) ** 2.)
-        end
-    else
-    if y <= s then
-      if z <= s then
-        begin
-          (* face *)
-          x -. s
-        end
-      else
-        begin
-          (* edge *)
-          sqrt ((x -. s) ** 2. +. (z -. s) ** 2.)
-        end
-    else
-    if z <= s then
-      begin
-        (* edge *)
-        sqrt ((x -. s) ** 2. +. (y -. s) ** 2.)
-      end
-    else
-      begin
-        (* vertex *)
-        sqrt ((x -. s) ** 2. +. (y -. s) ** 2. +. (z -. s) ** 2.)
-      end
+    gives octant of a first vector relative to the second vector as a center
 
-  type child =
-    | Node of node
-    | Point of vec3
-    (* [@@deriving show] *)
+    can we say x:N-S, y:E-W, z:U-D?
 
-  type point_list = vec3 list [@@deriving show]
+    cmp :: V3 Double -> V3 Double -> ODir
+    cmp ca cb = joinStep (cx, cy, cz)
+      where cx = v3x ca >= v3x cb
+            cy = v3y ca >= v3y cb
+            cz = v3z ca >= v3z cb
+  *)
+      let relative_octant ca cb =
+        let cx = V3.x ca >= V3.x cb
+        and cy = V3.y ca >= V3.y cb
+        and cz = V3.z ca >= V3.z cb in
+        octant_of_flags (cx, cy, cz)
 
-  (* make Priority Queue types for our nearest search *)
-  module PQ_Item = struct
-    type t = child
-    let compare a b =
-      (* PQ appears to treat items which compare equal as dups *)
-      match a, b with
-      | Node a', Node b' -> compare (a'.level, a'.id) (b'.level, b'.id)
-      | Node _, Point _ -> 1
-      | Point _, Node _ -> -1
-      | Point a', Point b' -> V3.compare a' b'
-    let pp fmt item =
-      match item with
-      | Node node ->
-        let points = points node in
-        Format.fprintf fmt
-          "Node(level: %i, id: %s, points: %a, offset: %a)"
-          node.level
-          (id_to_string node.level node.id)
-          pp_point_list points
-          pp_vec3 node.origin
-      (* pp_node fmt node *)
-      | Point point -> Format.fprintf fmt "Point%a" pp_vec3 point
-  end
-  module PQ_Priority = struct
-    type t = float
-    let compare = compare
-    let pp fmt = Format.fprintf fmt (format_of_string "%f")
-  end
-  module PQ = Psq.Make(PQ_Item)(PQ_Priority)
+      let rec split_by centre = function
+        | [] -> ([], [], [], [], [], [], [], [])
+        | pt :: pts -> (
+            let octant = relative_octant pt centre in
+            (* recursion here is just visiting all pts in current level via head::tail, not going deeper *)
+            let swd, sed, nwd, ned, swu, seu, nwu, neu = split_by centre pts in
+            match octant with
+            | SWD -> (pt :: swd, sed, nwd, ned, swu, seu, nwu, neu)
+            | SED -> (swd, pt :: sed, nwd, ned, swu, seu, nwu, neu)
+            | NWD -> (swd, sed, pt :: nwd, ned, swu, seu, nwu, neu)
+            | NED -> (swd, sed, nwd, pt :: ned, swu, seu, nwu, neu)
+            | SWU -> (swd, sed, nwd, ned, pt :: swu, seu, nwu, neu)
+            | SEU -> (swd, sed, nwd, ned, swu, pt :: seu, nwu, neu)
+            | NWU -> (swd, sed, nwd, ned, swu, seu, pt :: nwu, neu)
+            | NEU -> (swd, sed, nwd, ned, swu, seu, nwu, pt :: neu))
 
-  let pp_pq_pair fmt pair =
-    let item, d = pair in
-    Format.fprintf fmt "(%a, distance: %a)" PQ_Item.pp item PQ_Priority.pp d
+      let split_by' f centre half_size (swd, sed, nwd, ned, swu, seu, nwu, neu) =
+        let swd, sed, nwd, ned, swu, seu, nwu, neu =
+          tmap8 f (swd, sed, nwd, ned, swu, seu, nwu, neu)
+        in
+        Node { centre; half_size; nwu; nwd; neu; ned; swu; swd; seu; sed }
 
-  let children_to_seq = function
-    | Nodes nodes ->
-      Array.to_seq nodes
-      |> Seq.filter_map (function
-          | Some node -> Some (Node node)
-          | None -> None
-        )
-    | Points points -> List.to_seq points |> Seq.map (fun el -> Point el)
+      let child_of_octant node = function
+        | NWU -> node.nwu
+        | NWD -> node.nwd
+        | NEU -> node.neu
+        | NED -> node.ned
+        | SWU -> node.swu
+        | SWD -> node.swd
+        | SEU -> node.seu
+        | SED -> node.sed
 
-  let _nearest points p =
-    if List.length points = 0 then
-      raise @@ Invalid_argument "nearest oracle: points list was empty"
-    else
-      let d, _ =
-        List.map (fun p' -> (distance p' p, p')) points
-        |> List.sort compare
-        |> List.hd
-      in
-      d
+      let children_of_node node =
+        List.map (fun o -> (o, child_of_octant node o)) all_octants
 
-  (* TODO return option type instead of raise Not_found ? *)
-  let node_nearest root_size node p =
-    let rec nearest' pq children p =
-      (* enqueue children of current octant *)
-      let items = Seq.map (fun child ->
-          match child with
-          | Node node ->
-            let d = octant_surface_distance root_size node p in
-            (Node node, d)
-          | Point p' -> 
-            let d = distance p p' in
-            (Point p', d)
-        ) children
-      in
-      let _items = List.of_seq items in
-      let pq = PQ.add_seq items pq in
-      (* pop current best match *)
-      match PQ.pop pq with
-      | Some ((child, _), pq) -> begin
-          match child with
-          | Point p' -> p'  (* this is the nearest *)
-          | Node node -> nearest' pq (children_to_seq node.children) p
-        end
-      | None -> raise Not_found  (* would mean our tree was empty *)
-    in
-    nearest' PQ.empty (children_to_seq node.children) p
+      let rec path_to pt tree =
+        match tree with
+        | Leaf _ -> []
+        | Node node ->
+          let step = relative_octant pt node.centre in
+          step :: path_to pt (child_of_octant node step)
 
-  let nearest tree p =
-    node_nearest tree.size tree.root p
+      let rec apply_by_path f octants tree =
+        (* Once we reach a leaf, we cannot descend further in the tree; we
+           therefore apply [f] to that leaf regardless of any remaining
+           octants in the path. *)
+        match (octants, tree) with
+        | _, Leaf _ -> f tree
+        | [], Node _ -> f tree
+        | step :: path, Node node -> (
+            match step with
+            | NWU -> Node { node with nwu = apply_by_path f path node.nwu }
+            | NWD -> Node { node with nwd = apply_by_path f path node.nwd }
+            | NEU -> Node { node with neu = apply_by_path f path node.neu }
+            | NED -> Node { node with ned = apply_by_path f path node.ned }
+            | SWU -> Node { node with swu = apply_by_path f path node.swu }
+            | SWD -> Node { node with swd = apply_by_path f path node.swd }
+            | SEU -> Node { node with seu = apply_by_path f path node.seu }
+            | SED -> Node { node with sed = apply_by_path f path node.sed })
 
-  let distances tree p =
-    List.map (fun p' -> (p', distance p p')) (points tree.root)
+      let find_centre pts =
+        match pts with
+        | [] -> raise @@ Invalid_argument "Empty points list"
+        | [ p ] -> p
+        | hd :: tl ->
+          let count = List.length pts |> Float.of_int in
+          V3.div (List.fold_left V3.add hd tl) (V3.of_tuple @@ repeat_3 count)
 
-end
+    (*
+    [leaf_size] is max points per leaf before splitting
+    so we recursively split on the centre point of the *points* in each octant
+    NOTE: cannot insert to existing node, only leaf
+
+    NOTE: When duplicate points exceed [leaf_size], we detect the degenerate case
+    (all points in same octant) and stop splitting, leaving an oversized leaf.
+    See: https://github.com/BioHaskell/octree/issues/14
+
+    Also... duplicate points will skew the calculation of [find_centre] since
+    it is finding the mean point.
+
+    (Avoid adding duplicate points to the tree if possible)
+  *)
+      let rec from_list' leaf_size pts =
+        let len = List.length pts in
+        if len <= leaf_size then Leaf pts
+        else
+          let centre = find_centre pts in
+          let cx = V3.x centre and cy = V3.y centre and cz = V3.z centre in
+          let half_size =
+            List.fold_left
+              (fun acc pt ->
+                 let dx = abs_float (V3.x pt -. cx) in
+                 let dy = abs_float (V3.y pt -. cy) in
+                 let dz = abs_float (V3.z pt -. cz) in
+                 let d = max dx (max dy dz) in
+                 if d > acc then d else acc)
+              0. pts
+          in
+          let swd, sed, nwd, ned, swu, seu, nwu, neu = split_by centre pts in
+          let degenerate =
+            List.length swd = len
+            || List.length sed = len
+            || List.length nwd = len
+            || List.length ned = len
+            || List.length swu = len
+            || List.length seu = len
+            || List.length nwu = len
+            || List.length neu = len
+          in
+          if degenerate then Leaf pts
+          else
+            split_by' (from_list' leaf_size) centre half_size
+              (swd, sed, nwd, ned, swu, seu, nwu, neu)
+
+      let insert root pt =
+        let path = path_to pt root.tree in
+        let insert' = function
+          | Leaf l -> from_list' root.leaf_size (pt :: l)
+          | Node _ ->
+            raise @@ Invalid_argument "Cannot insert into a Node - inserts can only be performed on Leaf nodes"
+        in
+        { root with tree = apply_by_path insert' path root.tree }
+
+      let of_list ?(leaf_size = default_leaf_size) pts =
+        if leaf_size < 1 then
+          raise @@ Invalid_argument "leaf_size must be at least 1"
+        else
+          { leaf_size; tree = from_list' leaf_size pts }
+
+      let tree_of t = t.tree
+
+      (* Euclidean distance. Always positive (i.e. has no direction) *)
+      let distance a b = V3.sub a b |> V3.norm
+
+      let distance_sq_coords px py pz pt =
+        let dx = V3.x pt -. px in
+        let dy = V3.y pt -. py in
+        let dz = V3.z pt -. pz in
+        (dx *. dx) +. (dy *. dy) +. (dz *. dz)
+      let rec to_list' children =
+        List.concat_map
+          (function
+            | _, Leaf pts' -> pts'
+            | _, Node node' -> to_list' (children_of_node node'))
+          children
+
+      let to_list = function
+        | Leaf points -> points
+        | Node node -> to_list' (children_of_node node)
+
+    (*
+    NOTE: the returned 'octant' no longer represents an octant
+    per se but one of 8 derived possibilities
+    ...this is a confusing overloading!
+    ...but it saves creating another 8 member variant and
+      identical join/split functions 
+
+    we can see in [octant_distance'] below what they mean
+    i.e. NEU means pt is "in the tested octant"
+
+    The boolean checks expand out like:
+      true != (not false) -> false
+      false != (not false) -> true
+      true != (not true) -> true
+      false != (not true) -> false
+
+    so to get NEU we need:
+      x >= 0 and u = true  -> confirmed in the +x octant
+      x < 0  and u = false -> confirmed in the -x octant
+      etc
+
+    and then when fewer bits are set we get the other options
+  *)
+      let point_pos dp octant =
+        let u, v, w = octant_to_flags octant in
+        octant_of_flags
+          (V3.x dp >= 0. <> not u, V3.y dp >= 0. <> not v, V3.z dp >= 0. <> not w)
+
+      let octant_distance' dp = function
+        (* pt is in this octant *)
+        | NEU -> 0.0
+        (* adjacent by plane *)
+        | NWU -> V3.x dp
+        | SEU -> V3.y dp
+        | NED -> V3.z dp
+        (* adjacent by edge *)
+        | SWU -> sqrt ((V3.x dp ** 2.) +. (V3.y dp ** 2.))
+        | SED -> sqrt ((V3.y dp ** 2.) +. (V3.z dp ** 2.))
+        | NWD -> sqrt ((V3.x dp ** 2.) +. (V3.z dp ** 2.))
+        (* adjacent by vertex *)
+        | SWD -> V3.norm dp
+
+    (*
+    where [dp] is difference between pt and octant centre
+    ...which is like translating octant centre (with pt) to 0,0,0 origin
+    and [octant] is the child octant id
+  *)
+      let octant_distance dp octant =
+        octant_distance' (V3.map abs_float dp) (point_pos dp octant)
+
+      (* Depth-first nearest neighbor search with aggressive pruning.
+                   Key optimizations:
+                   1. Visit the octant containing the query point first (most likely to have nearest)
+                   2. Prune octants whose closest point is farther than current best
+                   3. No heap allocation - pure recursive traversal *)
+
+      let[@inline] cube_dist_sq px py pz cx cy cz hs =
+        let dx = abs_float (px -. cx) -. hs in
+        let dy = abs_float (py -. cy) -. hs in
+        let dz = abs_float (pz -. cz) -. hs in
+        let dx = if dx > 0. then dx else 0. in
+        let dy = if dy > 0. then dy else 0. in
+        let dz = if dz > 0. then dz else 0. in
+        (dx *. dx) +. (dy *. dy) +. (dz *. dz)
+
+      let[@inline] search_leaf best_d2 best_pt px py pz points =
+        let rec loop best_d2 best_pt = function
+          | [] -> (best_d2, best_pt)
+          | pt :: rest ->
+            let d2 = distance_sq_coords px py pz pt in
+            if d2 < best_d2 then loop d2 (Some pt) rest
+            else loop best_d2 best_pt rest
+        in
+        loop best_d2 best_pt points
+
+      (* Search a single child, returning updated best *)
+      let rec search_child best_d2 best_pt px py pz child =
+        match child with
+        | Leaf points -> search_leaf best_d2 best_pt px py pz points
+        | Node n ->
+          let cx = V3.x n.centre
+          and cy = V3.y n.centre
+          and cz = V3.z n.centre in
+          let d2 = cube_dist_sq px py pz cx cy cz n.half_size in
+          if d2 >= best_d2 then (best_d2, best_pt)
+          else search_node best_d2 best_pt px py pz n
+
+      (* Search all 8 children of a node, starting with the one containing the query point *)
+      and search_node best_d2 best_pt px py pz node =
+        let cx = V3.x node.centre
+        and cy = V3.y node.centre
+        and cz = V3.z node.centre in
+        (* Determine which octant the query point is in *)
+        let ge_x = px >= cx and ge_y = py >= cy and ge_z = pz >= cz in
+        (* Get children in order from primary octant outward *)
+        let c0, c1, c2, c3, c4, c5, c6, c7 =
+          match (ge_x, ge_y, ge_z) with
+          | false, false, false ->
+            ( node.swd,
+              node.sed,
+              node.nwd,
+              node.swu,
+              node.ned,
+              node.seu,
+              node.nwu,
+              node.neu )
+          | true, false, false ->
+            ( node.sed,
+              node.swd,
+              node.ned,
+              node.seu,
+              node.nwd,
+              node.swu,
+              node.neu,
+              node.nwu )
+          | false, true, false ->
+            ( node.nwd,
+              node.ned,
+              node.swd,
+              node.nwu,
+              node.sed,
+              node.swu,
+              node.neu,
+              node.seu )
+          | true, true, false ->
+            ( node.ned,
+              node.nwd,
+              node.sed,
+              node.neu,
+              node.swd,
+              node.seu,
+              node.nwu,
+              node.swu )
+          | false, false, true ->
+            ( node.swu,
+              node.seu,
+              node.nwu,
+              node.swd,
+              node.neu,
+              node.sed,
+              node.nwd,
+              node.ned )
+          | true, false, true ->
+            ( node.seu,
+              node.swu,
+              node.neu,
+              node.sed,
+              node.nwu,
+              node.swd,
+              node.ned,
+              node.nwd )
+          | false, true, true ->
+            ( node.nwu,
+              node.neu,
+              node.swu,
+              node.nwd,
+              node.seu,
+              node.swd,
+              node.ned,
+              node.sed )
+          | true, true, true ->
+            ( node.neu,
+              node.nwu,
+              node.seu,
+              node.ned,
+              node.swu,
+              node.nwd,
+              node.sed,
+              node.swd )
+        in
+        (* Search all children in order, with pruning *)
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c0 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c1 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c2 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c3 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c4 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c5 in
+        let best_d2, best_pt = search_child best_d2 best_pt px py pz c6 in
+        search_child best_d2 best_pt px py pz c7
+
+      let nearest root p =
+        let px = V3.x p and py = V3.y p and pz = V3.z p in
+        match root with
+        | Leaf points -> (
+            match search_leaf infinity None px py pz points with
+            | _, None -> raise Not_found
+            | _, Some pt -> pt)
+        | Node node -> (
+            match search_node infinity None px py pz node with
+            | _, None -> raise Not_found
+            | _, Some pt -> pt)
+
+      (* brute-force, for debugging *)
+      let distances root p =
+        List.map (fun p' -> (p', distance p p')) (to_list root)
+
+      let rec print_centres ?(label = "Root") tree =
+        ignore
+        @@
+        match tree with
+        | Node n ->
+          Format.printf "<%s> centre: %a\n" label pp_vec3 n.centre;
+          List.iter
+            (fun o ->
+               let child = child_of_octant n o in
+               print_centres ~label:(show_octant o) child)
+            all_octants
+        | Leaf _ -> ()
+
+      let rec print_centre_distances ?(label = "Root") tree p =
+        ignore
+        @@
+        match tree with
+        | Node n ->
+          Format.printf "<%s> p-to-centre: %f\n" label (distance n.centre p);
+          List.iter
+            (fun o ->
+               let child = child_of_octant n o in
+               let label = label ^ ": " ^ show_octant o in
+               Format.printf "<%s> p-to-surface: %f\n" label
+                 (octant_distance (V3.sub p n.centre) o);
+               print_centre_distances ~label child p)
+            all_octants
+        | Leaf _ -> ()
+    end

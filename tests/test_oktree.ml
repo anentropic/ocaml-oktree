@@ -1,32 +1,30 @@
 open Popper
 open Sample.Syntax
-
 module O = Oktree.Make (Gg.V3)
 
-type point_list = Gg.V3.t list [@@deriving show]
+let pp_vec3 fmt p =
+  let x, y, z = Gg.V3.to_tuple p in
+  Format.fprintf fmt "(%f, %f, %f)" x y z
+
+let pp_point_list fmt =
+  let pp_sep fmt' () = Format.pp_print_string fmt' "; " in
+  let ppl fmt' = Format.pp_print_list ~pp_sep pp_vec3 fmt' in
+  Format.fprintf fmt "[%a]" ppl
 
 let strict_float_range low high =
   let rec sample () =
     let* x = Sample.Float.range low high in
-    if x < low || x > high then
-      sample ()
-    else
-      Sample.return x
+    if x < low || x > high then sample () else Sample.return x
   in
   sample ()
 
 let expect_raises f exc_f pp =
-  let result_opt =
-    try exc_f f
-    with e -> Some (Error e)
-  in
+  let result_opt = try exc_f f with e -> Some (Error e) in
   match result_opt with
-  | Some (Ok a) ->
-    fail @@ Format.asprintf "Unexpected result: %a" pp a
+  | Some (Ok a) -> fail @@ Format.asprintf "Unexpected result: %a" pp a
   | Some (Error e) ->
-    fail @@ Printf.sprintf "Unexpected error: %s" (Printexc.to_string e) 
-  | None -> pass  (* the correct result *)
-
+    fail @@ Printf.sprintf "Unexpected error: %s" (Printexc.to_string e)
+  | None -> pass (* the correct result *)
 
 let sample_ggv3 low high =
   let* x = strict_float_range low high in
@@ -34,9 +32,7 @@ let sample_ggv3 low high =
   let* z = strict_float_range low high in
   Sample.return (Gg.V3.v x y z)
 
-let compare_ggv3 =
-  Comparator.make Gg.V3.compare Gg.V3.pp
-
+let compare_ggv3 = Comparator.make Gg.V3.compare Gg.V3.pp
 let sort_ggv3_list = List.sort Gg.V3.compare
 
 (* let compare_ggv3_opt =
@@ -69,9 +65,6 @@ let sort_ggv3_list = List.sort Gg.V3.compare
    in
    Comparator.make cmp pp *)
 
-let compare_oktree = Comparator.make compare O.pp
-let compare_oktree_node = Comparator.make compare O.pp_node
-
 let distance a b = Gg.V3.sub a b |> Gg.V3.norm
 
 type point_distance_list = (float * Gg.V3.t) list [@@deriving show]
@@ -82,214 +75,266 @@ let nearest points p =
     raise @@ Invalid_argument "nearest oracle: points list was empty"
   else
     let sorted =
-      List.map (fun p' -> (distance p' p, p')) points
-      |> List.sort compare
+      List.map (fun p' -> (distance p' p, p')) points |> List.sort compare
     in
-    let* _ = 
-      Sample.log_key_value "Oracle" @@ (Format.asprintf "%a" pp_point_distance_list sorted)
+    let* _ =
+      Sample.log_key_value "Oracle"
+      @@ Format.asprintf "%a" pp_point_distance_list sorted
     in
     let _, result = List.hd sorted in
     Sample.return result
 
-let test_empty =
-  test @@ fun () ->
-  let* depth = Sample.Int.range 2 16 in
-  let tree = O.empty depth in
-  let expected : O.t =
-    {
-      depth;
-      size = 1.;
-      root = {
-        children = Nodes (Array.make 8 None);
-        level = 0;
-        id = 0;
-        origin = Gg.V3.of_tuple (0., 0., 0.);
-      }
-    }
-  in
-  equal compare_oktree expected tree
+let from_tuples l = List.map (fun (x, y, z) -> Gg.V3.v x y z) l
 
-let test_empty_depth_1 =
-  test @@ fun () ->
-  let depth = 1 in
-  let tree = O.empty depth in
-  let expected : O.t =
-    {
-      depth;
-      size = 1.;
-      root = {
-        children = Points [];
-        level = 0;
-        id = 0;
-        origin = Gg.V3.of_tuple (0., 0., 0.);
-      }
-    }
-  in
-  equal compare_oktree expected tree
-
-let test_empty_invalid =
-  test @@ fun () ->
-  (* tree depth must be in range 1..20 inclusive *)
-  let* depth = Sample.one_value_of [-1; 0; 21;] in
-  let exc_f f = try Some (Ok (f ())) with Invalid_argument _ -> None in
-  expect_raises (fun () -> O.empty depth) exc_f O.pp
-
-let test_points =
-  test @@ fun () ->
-  let tree = O.empty 1 in
-  O.add tree Gg.V3.zero;
-  let points = O.points tree.root in
-  equal Comparator.(list compare_ggv3) [Gg.V3.zero] points
+(* TESTS *)
 
 let test_of_list =
   test @@ fun () ->
-  let points = [Gg.V3.ox; Gg.V3.oy; Gg.V3.oz] |> sort_ggv3_list in
-  let tree = O.of_list 4 points in
-  let points = O.points tree.root |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) points points
+  let expected = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] |> sort_ggv3_list in
+  let root = O.of_list expected in
+  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) actual expected
 
 let test_of_list_sample_nonempty =
   test @@ fun () ->
   let* points =
-    Sample.with_log
-      "Sample points"
+    Sample.with_log "Sample points"
       (fun fmt points' -> pp_point_list fmt points')
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
-  let tree = O.of_list 4 points in
-  let points = O.points tree.root |> sort_ggv3_list in
-  ignore @@ equal Comparator.int (List.length points) (List.length points);
-  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) points
+  let root = O.of_list points in
+  let expected = points |> sort_ggv3_list in
+  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
+  ignore @@ equal Comparator.int (List.length expected) (List.length actual);
+  equal Comparator.(list compare_ggv3) actual expected
 
-let test_nearest1 =
-  test @@ fun () ->
-  let points = [Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2] in
-  let tree = O.of_list 4 points in
-  let target = Gg.V3.v 0.24 0.24 0.24 in
-  let result = O.nearest tree target in
-  let* expected = nearest points target in
-  equal compare_ggv3 result expected
-
-let test_nearest2 =
-  test @@ fun () ->
-  let points = [Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263] in
-  let tree = O.of_list 4 points in
-  let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* expected = nearest points target in
-  let result = O.nearest tree target in
-  let* _ = 
-    Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
+let test_nearest_handpicked =
+  (* Hand-picked points + target sets *)
+  let make points target =
+    test @@ fun () ->
+    let root = O.of_list points in
+    let* expected = nearest points target in
+    let result = O.nearest (O.tree_of root) target in
+    let* _ =
+      Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
+    in
+    let* _ =
+      Sample.log_key_value "Expected distance"
+      @@ Float.to_string (distance target expected)
+    in
+    let* _ =
+      Sample.log_key_value "Result distance"
+      @@ Float.to_string (distance target result)
+    in
+    equal compare_ggv3 result expected
   in
-  let* _ = 
-    Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
+  let args =
+    [
+      ([Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2],
+       Gg.V3.v 0.24 0.24 0.24);
+      ([Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      ([Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      ([Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406],
+       Gg.V3.v 0.3333 0.41 0.6667);
+      (*
+        Copilot added this set, duplicates and all. Presumably to capture PBT cases that failed during dev:
+      *)
+      ( from_tuples
+          [
+            (0.000000, 0.135509, 0.558065);
+            (0.000000, 0.000000, 0.251862);
+            (0.000000, 0.000000, 0.309942);
+            (0.000000, 0.818889, 0.000000);
+            (0.558965, 0.114604, 0.000000);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.297470);
+            (0.000000, 0.000000, 0.449710);
+            (0.000000, 0.000000, 0.302328);
+            (0.497573, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.449739);
+            (0.000000, 0.000000, 0.302581);
+            (0.000000, 0.933309, 0.000000);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.321395);
+            (0.000000, 0.000000, 0.407899);
+            (0.032235, 0.087385, 0.615754);
+            (0.000000, 0.373305, 0.000000);
+            (0.000000, 0.000000, 0.432156);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.247959);
+            (0.000000, 0.000000, 0.361187);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.483175);
+            (0.000000, 0.000000, 0.367874);
+            (0.000000, 0.000000, 0.445183);
+            (0.000000, 0.000000, 0.000000);
+            (0.000000, 0.000000, 0.306433);
+          ],
+        Gg.V3.v 0.3333 0.41 0.6667 );
+    ]
   in
-  let* _ = 
-    Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
-  in
-  equal compare_ggv3 result expected
-
-let test_nearest3 =
-  test @@ fun () ->
-  let points = [Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422] in
-  let tree = O.of_list 4 points in
-  let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* expected = nearest points target in
-  let result = O.nearest tree target in
-  let* _ = 
-    Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
-  in
-  let* _ = 
-    Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
-  in
-  let* _ = 
-    Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
-  in
-  equal compare_ggv3 result expected
-
-let test_nearest4 =
-  test @@ fun () ->
-  let points = [Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406] in
-  let tree = O.of_list 4 points in
-  let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* expected = nearest points target in
-  let result = O.nearest tree target in
-  let* _ = 
-    Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
-  in
-  let* _ = 
-    Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
-  in
-  let* _ = 
-    Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
-  in
-  equal compare_ggv3 result expected
+  suite
+  @@ List.mapi
+    (fun i (points, target) -> (Printf.sprintf "%i" i, make points target))
+    args
 
 let test_nearest_sample_nonempty =
-  test ~config:(Config.num_samples 5000) @@ fun () ->
+  let configs = [ Config.num_samples 5000; Config.seed [ 1 ] ] in
+  test ~config:(Config.all configs) @@ fun () ->
   let* points =
-    Sample.with_log
-      "Sample points"
-      pp_point_list
+    Sample.with_log "Sample points" pp_point_list
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
   let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* _ = 
+  let* _ =
     Sample.log_key_value "Length" (List.length points |> Int.to_string)
   in
-  let tree = O.of_list 4 points in
+  let root = O.of_list points in
   let* expected = nearest points target in
-  let result = O.nearest tree target in
-  let* _ = 
+  let result = O.nearest (O.tree_of root) target in
+  let* _ =
     Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
   in
-  let* _ = 
-    Sample.log_key_value "Expected distance" @@ Float.to_string (distance target expected)
+  let* _ =
+    Sample.log_key_value "Expected distance"
+    @@ Float.to_string (distance target expected)
   in
-  let* _ = 
-    Sample.log_key_value "Result distance" @@ Float.to_string (distance target result)
+  let* _ =
+    Sample.log_key_value "Result distance"
+    @@ Float.to_string (distance target result)
   in
   equal compare_ggv3 result expected
 
 let test_nearest_sample_empty =
   test @@ fun () ->
-  let root = O.of_list 4 [] in
+  let root = O.of_list [] in
   let p = Gg.V3.v 0.2 0.5 0.7 in
   let exc_f f = try Some (Ok (f ())) with Not_found -> None in
-  expect_raises (fun () -> O.nearest root p) exc_f Gg.V3.pp
+  expect_raises (fun () -> O.nearest (O.tree_of root) p) exc_f Gg.V3.pp
 
-let empty_suite = 
-  suite
+(* Edge case tests for empty trees and basic operations *)
+
+let test_empty_tree =
+  test @@ fun () ->
+  (* Create an empty tree and verify it can be created without error *)
+  let root = O.of_list [] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree in
+  equal Comparator.(list compare_ggv3) [] points
+
+let test_single_point =
+  test @@ fun () ->
+  (* Test tree with a single point *)
+  let pt = Gg.V3.v 0.5 0.5 0.5 in
+  let root = O.of_list [ pt ] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree in
+  equal Comparator.(list compare_ggv3) [ pt ] points
+
+let test_duplicate_points =
+  test @@ fun () ->
+  (* Test tree with duplicate points *)
+  let pt = Gg.V3.zero in
+  let root = O.of_list [ pt; pt; pt ] in
+  let tree = O.tree_of root in
+  let points = O.to_list tree |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) [ pt; pt; pt ] points
+
+let test_nearest_single_point =
+  test @@ fun () ->
+  (* Test nearest on tree with single point *)
+  let pt = Gg.V3.v 0.1 0.2 0.3 in
+  let root = O.of_list [ pt ] in
+  let tree = O.tree_of root in
+  let query = Gg.V3.v 0.5 0.5 0.5 in
+  let result = O.nearest tree query in
+  equal compare_ggv3 pt result
+
+let test_invalid_leaf_size =
+  test @@ fun () ->
+  (* Test that invalid leaf_size parameters raise an error *)
+  let* leaf_size = Sample.one_value_of [ 0; -1; -10 ] in
+  let points = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] in
+  let exc_f f =
+    try Some (Ok (f ())) with Invalid_argument _ -> None
+  in
+  expect_raises
+    (fun () -> O.of_list ~leaf_size points)
+    exc_f
+    (fun fmt _ -> Format.fprintf fmt "<tree>")
+
+let test_insert_to_empty =
+  test @@ fun () ->
+  (* Test inserting a point into an empty tree *)
+  let root = O.of_list [] in
+  let pt = Gg.V3.v 0.5 0.5 0.5 in
+  let new_root = O.insert root pt in
+  let points = O.to_list (O.tree_of new_root) in
+  equal Comparator.(list compare_ggv3) [ pt ] points
+
+let test_insert_multiple =
+  test @@ fun () ->
+  (* Test inserting multiple points one by one *)
+  let pt1 = Gg.V3.v 0.1 0.1 0.1 in
+  let root1 = O.of_list [ pt1 ] in
+  let pt2 = Gg.V3.v 0.9 0.9 0.9 in
+  let root2 = O.insert root1 pt2 in
+  let points = O.to_list (O.tree_of root2) |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) (sort_ggv3_list [ pt1; pt2 ]) points
+
+let test_points_at_boundaries =
+  test @@ fun () ->
+  (* Test with points at coordinate boundaries *)
+  let points =
     [
-      ("max-depth 1", test_empty_depth_1);
-      ("max-depth 2..16", test_empty);
-      ("invalid", test_empty_invalid);
+      Gg.V3.v 0. 0. 0.;
+      Gg.V3.v 1. 1. 1.;
+      Gg.V3.v 0. 1. 0.;
+      Gg.V3.v 1. 0. 1.;
     ]
+  in
+  let root = O.of_list points in
+  let tree = O.tree_of root in
+  let result = O.to_list tree |> sort_ggv3_list in
+  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result
 
-let of_list_suite = 
+(* RUNNER *)
+
+let of_list_suite =
   suite
     [
       ("3 static points", test_of_list);
       ("sampled points, nonempty", test_of_list_sample_nonempty);
     ]
 
-let nearest_suite = 
+let nearest_suite =
   suite
     [
-      ("1. static points, depth 4", test_nearest1);
-      ("2. static points, depth 4", test_nearest2);
-      ("3. static points, depth 4", test_nearest3);
-      ("4. static points, depth 4", test_nearest4);
-      ("sampled points, nonempty, depth 4", test_nearest_sample_nonempty);
+      ("handpicked", test_nearest_handpicked);
+      ("sampled points, nonempty", test_nearest_sample_nonempty);
       ("sampled points, []", test_nearest_sample_empty);
+      ("single point", test_nearest_single_point);
+    ]
+
+let edge_cases_suite =
+  suite
+    [
+      ("empty tree", test_empty_tree);
+      ("single point", test_single_point);
+      ("duplicate points", test_duplicate_points);
+      ("insert to empty", test_insert_to_empty);
+      ("insert multiple", test_insert_multiple);
+      ("points at boundaries", test_points_at_boundaries);
+      ("invalid leaf_size", test_invalid_leaf_size);
     ]
 
 let tests =
   suite
     [
-      ("empty", empty_suite);
-      ("points", test_points);
       ("of_list", of_list_suite);
       ("nearest", nearest_suite);
+      ("edge_cases", edge_cases_suite);
     ]
-
 let () = run tests

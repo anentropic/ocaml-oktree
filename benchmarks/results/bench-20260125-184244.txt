@@ -1,0 +1,13 @@
+Estimated testing time 24s (8 benchmarks x 3s). Change using '-quota'.
+┌───────────────────────────────────────┬──────────┬─────────┬────────────┬────────────┬────────────┐
+│ Name                                  │ Time/Run │ mWd/Run │   mjWd/Run │   Prom/Run │ Percentage │
+├───────────────────────────────────────┼──────────┼─────────┼────────────┼────────────┼────────────┤
+│ Uniform/uniform pts:256 queries:256   │   1.24ms │  1.45Mw │    359.71w │    359.71w │      2.62% │
+│ Uniform/uniform pts:1024 queries:256  │   2.53ms │  2.66Mw │    757.28w │    757.28w │      5.33% │
+│ Uniform/uniform pts:4096 queries:256  │   3.72ms │  3.26Mw │  1_675.79w │  1_675.79w │      7.85% │
+│ Uniform/uniform pts:16384 queries:256 │   4.40ms │  2.78Mw │  2_130.44w │  2_130.44w │      9.29% │
+│ Normal/normal pts:256 queries:256     │   1.32ms │  1.46Mw │    372.85w │    372.85w │      2.78% │
+│ Normal/normal pts:1024 queries:256    │   3.95ms │  3.76Mw │  1_696.58w │  1_696.58w │      8.34% │
+│ Normal/normal pts:4096 queries:256    │  13.72ms │ 12.56Mw │ 12_995.69w │ 12_995.69w │     28.96% │
+│ Normal/normal pts:16384 queries:256   │  47.39ms │ 26.02Mw │ 95_331.64w │ 95_331.64w │    100.00% │
+└───────────────────────────────────────┴──────────┴─────────┴────────────┴────────────┴────────────┘

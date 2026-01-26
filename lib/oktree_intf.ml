@@ -16,10 +16,10 @@ module type VEC3 = sig
   val z : t -> float
   (** [z v] is the z component of [v]. *)
 
-  val of_tuple : (float * float * float) -> t
+  val of_tuple : float * float * float -> t
   (** [of_tuple (x, y, z)] is [v x y z]. *)
 
-  val to_tuple : t -> (float * float * float)
+  val to_tuple : t -> float * float * float
   (** [to_tuple v] is [(x v, y v, z v)]. *)
 
   val add : t -> t -> t
@@ -48,32 +48,21 @@ module type VEC3 = sig
 end
 
 (* public interface for Oktrees *)
-module type OKTREE =
-sig
+module type OKTREE = sig
   type vec3
-  type t = {
-    depth : int;   (* number of subdivisions *)
-    size : float;  (* max value - min value *)
-    root : node;
-  }
-  and node = {
-    mutable children: children;
-    level: int;
-    id : int;
-    origin: vec3;
-  }
-  and children =
-    | Nodes of node option array
-    | Points of vec3 list
+  type t
+  type tree
+  type node
+
   val pp : Format.formatter -> t -> unit
+  val pp_tree : Format.formatter -> tree -> unit
   val pp_node : Format.formatter -> node -> unit
-  val pp_children : Format.formatter -> children -> unit
-  val empty : ?size:float -> ?origin:vec3 -> int -> t
-  val add : t -> vec3 -> unit
-  val of_list : ?size:float -> ?origin:vec3 -> int -> vec3 list -> t
-  val of_seq : ?size:float -> ?origin:vec3 -> int -> vec3 Seq.t -> t
-  val points : node -> vec3 list
-  val node_nearest : float -> node -> vec3 -> vec3
-  val nearest : t -> vec3 -> vec3
-  val distances : t -> vec3 -> (vec3 * float) list
+  val insert : t -> vec3 -> t
+  val of_list : ?leaf_size:int -> vec3 list -> t
+  val to_list : tree -> vec3 list
+  val tree_of : t -> tree
+
+  val nearest : tree -> vec3 -> vec3
+  val print_centres : ?label:string -> tree -> unit
+  val print_centre_distances : ?label:string -> tree -> vec3 -> unit
 end

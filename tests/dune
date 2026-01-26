@@ -1,5 +1,5 @@
-(tests
- (names test_oktree)
+(test
+ (name test_oktree)
  (preprocess
   (pps ppx_deriving.show ppx_deriving_popper))
  (libraries popper gg oktree))
