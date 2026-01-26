@@ -60,8 +60,7 @@ module type OKTREE = sig
   val insert : t -> vec3 -> tree
   val of_list : ?leaf_size:int -> vec3 list -> t
   val to_list : tree -> vec3 list
-  val get_tree : t -> tree
-  (** [get_tree t] returns the tree contained in [t]. *)
+  val tree_of : t -> tree
 
   val nearest : tree -> vec3 -> vec3
   val print_centres : ?label:string -> tree -> unit
