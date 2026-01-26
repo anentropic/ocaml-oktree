@@ -23,6 +23,14 @@ dune clean && dune build
 2. Type "OCaml: Select a Sandbox for this Workspace"
 3. Select the local switch: `ocaml-oktree`
 
+## Tests
+
+Run tests with:
+
+```sh
+dune runtest --profile test
+```
+
 ## Run CI locally (act)
 
 For developing the GitHub Actions locally.

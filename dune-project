@@ -20,7 +20,6 @@
  (depends
   ; core deps
   (ocaml (>= 5.3))
-  (psq (>= 0.2))
   ppx_deriving
 
   ; test and benchmark deps

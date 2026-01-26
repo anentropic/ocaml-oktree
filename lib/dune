@@ -1,7 +1,7 @@
 (library
  (name oktree)
  (public_name oktree)
- (modules oktree oktree_intf utils)
+ (modules oktree oktree_intf)
  (preprocess
   (pps
    ppx_deriving.show
@@ -10,8 +10,7 @@
    ppx_deriving.enum
    ppx_deriving.map
    ppx_deriving.fold
-   ppx_deriving.iter))
- (libraries psq))
+   ppx_deriving.iter)))
 
 (library
  (name oktree_visualise)

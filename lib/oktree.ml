@@ -213,94 +213,11 @@ module Make =
       (* Euclidean distance. Always positive (i.e. has no direction) *)
       let distance a b = V3.sub a b |> V3.norm
 
-      let norm_sq v =
-        let x = V3.x v and y = V3.y v and z = V3.z v in
-        (x *. x) +. (y *. y) +. (z *. z)
-
       let distance_sq_coords px py pz pt =
         let dx = V3.x pt -. px in
         let dy = V3.y pt -. py in
         let dz = V3.z pt -. pz in
         (dx *. dx) +. (dy *. dy) +. (dz *. dz)
-      (* Possible optimisation: https://stackoverflow.com/a/1678481/202168
-                   if we only need to 'sort' and don't care about magnitude of
-                   distances then the sqrt step is superfluous (I think that
-                   would be just V3.norm2) *)
-
-      type candidate = Octant of node | Point of vec3 [@@deriving show]
-      type point_list = vec3 list [@@deriving show]
-
-      type heap = {
-        mutable size : int;
-        mutable nodes : candidate array;
-        mutable d2 : float array;
-      }
-
-      let heap_create () =
-        let dummy = Point (V3.of_tuple (0., 0., 0.)) in
-        { size = 0; nodes = Array.make 16 dummy; d2 = Array.make 16 infinity }
-
-      let heap_swap h i j =
-        let tmp_node = h.nodes.(i) in
-        let tmp_d2 = h.d2.(i) in
-        h.nodes.(i) <- h.nodes.(j);
-        h.d2.(i) <- h.d2.(j);
-        h.nodes.(j) <- tmp_node;
-        h.d2.(j) <- tmp_d2
-
-      let heap_grow h =
-        let old_len = Array.length h.nodes in
-        let new_len = old_len * 2 in
-        let dummy = h.nodes.(0) in
-        let new_nodes = Array.make new_len dummy in
-        let new_d2 = Array.make new_len infinity in
-        Array.blit h.nodes 0 new_nodes 0 old_len;
-        Array.blit h.d2 0 new_d2 0 old_len;
-        h.nodes <- new_nodes;
-        h.d2 <- new_d2
-
-      let heap_push h node d2 =
-        if h.size = Array.length h.nodes then heap_grow h;
-        let i = h.size in
-        h.size <- i + 1;
-        h.nodes.(i) <- node;
-        h.d2.(i) <- d2;
-        let rec sift_up i =
-          if i = 0 then ()
-          else
-            let p = (i - 1) / 2 in
-            if h.d2.(i) < h.d2.(p) then (
-              heap_swap h i p;
-              sift_up p)
-        in
-        sift_up i
-
-      let heap_pop h =
-        if h.size = 0 then None
-        else
-          let min_node = h.nodes.(0) in
-          let min_d2 = h.d2.(0) in
-          let last = h.size - 1 in
-          h.size <- last;
-          if last > 0 then (
-            h.nodes.(0) <- h.nodes.(last);
-            h.d2.(0) <- h.d2.(last);
-            let rec sift_down i =
-              let left = (2 * i) + 1 in
-              if left >= h.size then ()
-              else
-                let right = left + 1 in
-                let smallest =
-                  if right < h.size && h.d2.(right) < h.d2.(left) then right
-                  else left
-                in
-                if h.d2.(smallest) < h.d2.(i) then (
-                  heap_swap h i smallest;
-                  sift_down smallest)
-            in
-            sift_down 0);
-          Some (min_node, min_d2)
-
       let rec to_list' pts children =
         List.concat_map
           (function
@@ -361,83 +278,6 @@ module Make =
   *)
       let octant_distance dp octant =
         octant_distance' (V3.map abs_float dp) (point_pos dp octant)
-
-      let octant_distances dp =
-        List.map (fun o -> (o, octant_distance dp o)) all_octants
-
-      type candidate_list = candidate list [@@deriving show]
-
-    (*
--- | Finds nearest neighbour for a given point.
-nearest :: Octree a -> V3 Double -> Maybe (V3 Double, a)
-nearest (Leaf l) pt = pickClosest pt l
-nearest node pt = selectFrom candidates
-  where
-    -- list of (Maybe candidate, min. bound for octant distance) tuples, sorted by min. bound
-    -- `split node` is the centre point of `node`
-    -- so we are comparing pt translated so that octant centre is the origin
-    candidates = map findCandidate . List.sortBy compareDistance . octantDistances $ pt - split node
-
-    compareDistance a b = compare (snd a) (snd b)
-
-    -- finds candidates for a given octant, d arg is passed through
-    -- d is the distance from the point to the centre of the octant
-    findCandidate (octant, d) = (nearest' . octreeStep node $ octant, d)
-
-    nearest' n = nearest n pt
-
-    -- selects the best candidate from a list of candidates (via recursive h::t pattern matching)
-    selectFrom ((Nothing, _d) : cs) = selectFrom cs  -- given octant is empty, try next
-    selectFrom ((Just best, _d) : cs) = selectFrom' best cs  -- try to improve on current best with remaining candidates
-    selectFrom [] = Nothing
-
-    -- selects a better candidate from a list of candidates (via recursive h::t pattern matching)
-    -- or returns current `best` if none better is found
-    -- d is the distance from the point to the centre of the octant
-    -- PG: I understood this as analogous to Priority Queue, given we already sorted the list
-    selectFrom' best ((Nothing, d) : cs) = selectFrom' best cs  -- continue
-    -- if candidate octant is further away than current best, just return current best
-    -- TODO: FAILS: shortcut guard to avoid recursion over whole structure (since d is bound for distance within octant):
-    selectFrom' best ((_, d) : cs) | d > dist pt (fst best) = Just best
-    -- if candidate octant is closer (or equal) than current best, try to improve on it with remaining candidates
-    selectFrom' best ((Just next, d) : cs) = selectFrom' nextBest cs
-      where
-        -- check the actual point distances
-        nextBest =
-          if dist pt (fst best) <= dist pt (fst next)
-            then best
-            else next
-    selectFrom' best [] = Just best
-*)
-
-      let best_distance = function None -> infinity | Some (_, d2) -> d2
-
-      let cube_distance_sq_coords px py pz centre half_size =
-        let dx = abs_float (px -. V3.x centre) -. half_size in
-        let dy = abs_float (py -. V3.y centre) -. half_size in
-        let dz = abs_float (pz -. V3.z centre) -. half_size in
-        let dx = if dx > 0. then dx else 0. in
-        let dy = if dy > 0. then dy else 0. in
-        let dz = if dz > 0. then dz else 0. in
-        (dx *. dx) +. (dy *. dy) +. (dz *. dz)
-
-      let update_best_from_points_coords best px py pz points =
-        match points with
-        | [] -> best
-        | hd :: tl ->
-          let (best_pt, best_d2), rest_points =
-            match best with
-            | None -> ((hd, distance_sq_coords px py pz hd), tl)
-            | Some (pt, d2) -> ((pt, d2), points)
-          in
-          let best_pt, best_d2 =
-            List.fold_left
-              (fun (best_pt, best_d2) pt ->
-                 let d2 = distance_sq_coords px py pz pt in
-                 if d2 < best_d2 then (pt, d2) else (best_pt, best_d2))
-              (best_pt, best_d2) rest_points
-          in
-          Some (best_pt, best_d2)
 
       (* Depth-first nearest neighbor search with aggressive pruning.
                    Key optimizations:
