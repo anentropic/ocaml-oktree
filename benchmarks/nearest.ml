@@ -29,7 +29,7 @@ let make_tests ~name ~dist ~seed ~sizes ~n_queries =
        let tree = O.of_list pts in
        Bench.Test.create
          ~name:(Printf.sprintf "%s pts:%d queries:%d" name n_points n_queries)
-         (fun () -> List.iter (fun q -> ignore (O.nearest tree.tree q)) queries))
+         (fun () -> List.iter (fun q -> ignore (O.nearest (O.tree_of tree) q)) queries))
     sizes
 
 let main () =

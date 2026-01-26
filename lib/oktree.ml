@@ -211,6 +211,8 @@ module Make =
       let of_list ?(leaf_size = default_leaf_size) pts =
         { leaf_size; tree = from_list' leaf_size pts }
 
+      let tree_of t = t.tree
+
       (* Euclidean distance. Always positive (i.e. has no direction) *)
       let distance a b = V3.sub a b |> V3.norm
 

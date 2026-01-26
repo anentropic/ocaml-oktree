@@ -92,7 +92,7 @@ let test_of_list =
   test @@ fun () ->
   let expected = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] |> sort_ggv3_list in
   let root = O.of_list expected in
-  let actual = O.to_list root.tree |> sort_ggv3_list in
+  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) actual expected
 
 let test_of_list_sample_nonempty =
@@ -104,7 +104,7 @@ let test_of_list_sample_nonempty =
   in
   let root = O.of_list points in
   let expected = points |> sort_ggv3_list in
-  let actual = O.to_list root.tree |> sort_ggv3_list in
+  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
   ignore @@ equal Comparator.int (List.length expected) (List.length actual);
   equal Comparator.(list compare_ggv3) actual expected
 
@@ -113,7 +113,7 @@ let test_nearest_handpicked_failures =
     test @@ fun () ->
     let root = O.of_list points in
     let* expected = nearest points target in
-    let result = O.nearest root.tree target in
+    let result = O.nearest (O.tree_of root) target in
     let* _ =
       Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
     in
@@ -189,7 +189,7 @@ let test_nearest_sample_nonempty =
   in
   let root = O.of_list points in
   let* expected = nearest points target in
-  let result = O.nearest root.tree target in
+  let result = O.nearest (O.tree_of root) target in
   let* _ =
     Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
   in
@@ -208,7 +208,7 @@ let test_nearest_sample_empty =
   let root = O.of_list [] in
   let p = Gg.V3.v 0.2 0.5 0.7 in
   let exc_f f = try Some (Ok (f ())) with Not_found -> None in
-  expect_raises (fun () -> O.nearest root.tree p) exc_f Gg.V3.pp
+  expect_raises (fun () -> O.nearest (O.tree_of root) p) exc_f Gg.V3.pp
 
 (* RUNNER *)
 
