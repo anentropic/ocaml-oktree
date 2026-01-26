@@ -50,22 +50,9 @@ end
 (* public interface for Oktrees *)
 module type OKTREE = sig
   type vec3
-
-  type t = { leaf_size : int; tree : tree }
-  and tree = Node of node | Leaf of vec3 list
-
-  and node = {
-    centre : vec3;
-    half_size : float;
-    mutable nwu : tree;
-    mutable nwd : tree;
-    mutable neu : tree;
-    mutable ned : tree;
-    mutable swu : tree;
-    mutable swd : tree;
-    mutable seu : tree;
-    mutable sed : tree; (* i.e. N/S E/W Up/Down *)
-  }
+  type t
+  type tree
+  type node
 
   val pp : Format.formatter -> t -> unit
   val pp_tree : Format.formatter -> tree -> unit
@@ -73,6 +60,8 @@ module type OKTREE = sig
   val insert : t -> vec3 -> tree
   val of_list : ?leaf_size:int -> vec3 list -> t
   val to_list : tree -> vec3 list
+  val get_tree : t -> tree
+  (** [get_tree t] returns the tree contained in [t]. *)
 
   val nearest : tree -> vec3 -> vec3
   val print_centres : ?label:string -> tree -> unit
