@@ -207,7 +207,7 @@ module Make =
           | Node _ ->
             raise @@ Invalid_argument "Cannot insert into a Node - inserts can only be performed on Leaf nodes"
         in
-        apply_by_path insert' path root.tree
+        { root with tree = apply_by_path insert' path root.tree }
 
       let of_list ?(leaf_size = default_leaf_size) pts =
         if leaf_size < 1 then
