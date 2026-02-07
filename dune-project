@@ -19,7 +19,7 @@
   oplot)
  (depends
   ; core deps
-  (ocaml (>= 5.3))
+  (ocaml (>= 4.14))
   ppx_deriving
 
   ; test and benchmark deps

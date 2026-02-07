@@ -11,7 +11,7 @@ homepage: "https://github.com/anentropic/ocaml-oktree"
 bug-reports: "https://github.com/anentropic/ocaml-oktree/issues"
 depends: [
   "dune" {>= "3.5"}
-  "ocaml" {>= "5.3"}
+  "ocaml" {>= "4.14"}
   "ppx_deriving"
   "ppx_deriving_popper" {with-test & >= "0.1.1"}
   "gg" {with-test & >= "1.0"}
