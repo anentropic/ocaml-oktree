@@ -91,8 +91,8 @@ let from_tuples l = List.map (fun (x, y, z) -> Gg.V3.v x y z) l
 let test_of_list =
   test @@ fun () ->
   let expected = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] |> sort_ggv3_list in
-  let root = O.of_list expected in
-  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
+  let okt = O.of_list expected in
+  let actual = O.to_list okt |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) actual expected
 
 let test_of_list_sample_nonempty =
@@ -102,9 +102,9 @@ let test_of_list_sample_nonempty =
       (fun fmt points' -> pp_point_list fmt points')
       Sample.List.(non_empty @@ sample_ggv3 0. 1.)
   in
-  let root = O.of_list points in
+  let okt = O.of_list points in
   let expected = points |> sort_ggv3_list in
-  let actual = O.to_list (O.tree_of root) |> sort_ggv3_list in
+  let actual = O.to_list okt |> sort_ggv3_list in
   ignore @@ equal Comparator.int (List.length expected) (List.length actual);
   equal Comparator.(list compare_ggv3) actual expected
 
@@ -112,9 +112,9 @@ let test_nearest_handpicked =
   (* Hand-picked points + target sets *)
   let make points target =
     test @@ fun () ->
-    let root = O.of_list points in
+    let okt = O.of_list points in
     let* expected = nearest points target in
-    let result = O.nearest (O.tree_of root) target in
+    let result = O.nearest okt target in
     let* _ =
       Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
     in
@@ -191,9 +191,9 @@ let test_nearest_sample_nonempty =
   let* _ =
     Sample.log_key_value "Length" (List.length points |> Int.to_string)
   in
-  let root = O.of_list points in
+  let okt = O.of_list points in
   let* expected = nearest points target in
-  let result = O.nearest (O.tree_of root) target in
+  let result = O.nearest okt target in
   let* _ =
     Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
   in
@@ -209,47 +209,43 @@ let test_nearest_sample_nonempty =
 
 let test_nearest_sample_empty =
   test @@ fun () ->
-  let root = O.of_list [] in
+  let okt = O.of_list [] in
   let p = Gg.V3.v 0.2 0.5 0.7 in
   let exc_f f = try Some (Ok (f ())) with Not_found -> None in
-  expect_raises (fun () -> O.nearest (O.tree_of root) p) exc_f Gg.V3.pp
+  expect_raises (fun () -> O.nearest okt p) exc_f Gg.V3.pp
 
 (* Edge case tests for empty trees and basic operations *)
 
 let test_empty_tree =
   test @@ fun () ->
   (* Create an empty tree and verify it can be created without error *)
-  let root = O.of_list [] in
-  let tree = O.tree_of root in
-  let points = O.to_list tree in
+  let okt = O.of_list [] in
+  let points = O.to_list okt in
   equal Comparator.(list compare_ggv3) [] points
 
 let test_single_point =
   test @@ fun () ->
   (* Test tree with a single point *)
   let pt = Gg.V3.v 0.5 0.5 0.5 in
-  let root = O.of_list [ pt ] in
-  let tree = O.tree_of root in
-  let points = O.to_list tree in
+  let okt = O.of_list [ pt ] in
+  let points = O.to_list okt in
   equal Comparator.(list compare_ggv3) [ pt ] points
 
 let test_duplicate_points =
   test @@ fun () ->
   (* Test tree with duplicate points *)
   let pt = Gg.V3.zero in
-  let root = O.of_list [ pt; pt; pt ] in
-  let tree = O.tree_of root in
-  let points = O.to_list tree |> sort_ggv3_list in
+  let okt = O.of_list [ pt; pt; pt ] in
+  let points = O.to_list okt |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) [ pt; pt; pt ] points
 
 let test_nearest_single_point =
   test @@ fun () ->
   (* Test nearest on tree with single point *)
   let pt = Gg.V3.v 0.1 0.2 0.3 in
-  let root = O.of_list [ pt ] in
-  let tree = O.tree_of root in
+  let okt = O.of_list [ pt ] in
   let query = Gg.V3.v 0.5 0.5 0.5 in
-  let result = O.nearest tree query in
+  let result = O.nearest okt query in
   equal compare_ggv3 pt result
 
 let test_invalid_leaf_size =
@@ -268,20 +264,20 @@ let test_invalid_leaf_size =
 let test_insert_to_empty =
   test @@ fun () ->
   (* Test inserting a point into an empty tree *)
-  let root = O.of_list [] in
+  let okt = O.of_list [] in
   let pt = Gg.V3.v 0.5 0.5 0.5 in
-  let new_root = O.insert root pt in
-  let points = O.to_list (O.tree_of new_root) in
+  let new_okt = O.insert okt pt in
+  let points = O.to_list new_okt in
   equal Comparator.(list compare_ggv3) [ pt ] points
 
 let test_insert_multiple =
   test @@ fun () ->
   (* Test inserting multiple points one by one *)
   let pt1 = Gg.V3.v 0.1 0.1 0.1 in
-  let root1 = O.of_list [ pt1 ] in
+  let okt1 = O.of_list [ pt1 ] in
   let pt2 = Gg.V3.v 0.9 0.9 0.9 in
-  let root2 = O.insert root1 pt2 in
-  let points = O.to_list (O.tree_of root2) |> sort_ggv3_list in
+  let okt2 = O.insert okt1 pt2 in
+  let points = O.to_list okt2 |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) (sort_ggv3_list [ pt1; pt2 ]) points
 
 let test_points_at_boundaries =
@@ -295,9 +291,8 @@ let test_points_at_boundaries =
       Gg.V3.v 1. 0. 1.;
     ]
   in
-  let root = O.of_list points in
-  let tree = O.tree_of root in
-  let result = O.to_list tree |> sort_ggv3_list in
+  let okt = O.of_list points in
+  let result = O.to_list okt |> sort_ggv3_list in
   equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result
 
 (* RUNNER *)

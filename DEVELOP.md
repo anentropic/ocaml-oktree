@@ -23,6 +23,12 @@ dune clean && dune build && dune build --profile test
 2. Type "OCaml: Select a Sandbox for this Workspace"
 3. Select the local switch: `ocaml-oktree`
 
+## REPL
+
+```sh
+dune utop
+```
+
 ## Tests
 
 Run tests with:
@@ -39,7 +45,7 @@ For developing the GitHub Actions locally.
 brew install act
 ```
 
-The workflow uses `ocaml/setup-ocaml@v3`, which requires Node 24. The default act images don’t include Node 24 in the toolcache, so use the full runner image and set the toolcache path.
+The workflow uses `ocaml/setup-ocaml@v3`, which requires Node 24. The default `act` images don’t include Node 24 in the toolcache, so use the full runner image and set the toolcache path.
 
 Build a local act runner image with bubblewrap:
 

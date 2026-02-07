@@ -19,6 +19,7 @@ depends: [
   "core_unix" {with-test & >= "0.15.0"}
   "ocamlformat" {with-dev-setup}
   "ocp-indent" {with-dev-setup}
+  "utop" {with-dev-setup}
   "odoc" {with-doc}
 ]
 depopts: ["oplot"]
