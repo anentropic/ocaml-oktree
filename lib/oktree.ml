@@ -12,6 +12,10 @@ struct
   type vec3 = V3.t
 
   (* let pp_vec3 = V3.pp *)
+  (*
+    used for debugging func `_print_centres` so that vec components are printed with trailing zeros
+    for consistent width, making it easier to visually compare centres across octants
+  *)
   let pp_vec3 fmt p =
     let x, y, z = V3.to_tuple p in
     Format.fprintf fmt "(%f, %f, %f)" x y z
@@ -34,7 +38,7 @@ struct
   [@@deriving show, map, fold, iter]
 
   (*
-    Nodes array structure:
+    Octant tuple structure:
     octant  index  bits
     x0_y0_z0: 0 | 0 0 0
     x0_y0_z1: 1 | 0 0 1
@@ -44,6 +48,9 @@ struct
     x1_y0_z1: 5 | 1 0 1
     x1_y1_z0: 6 | 1 1 0
     x1_y1_z1: 7 | 1 1 1
+
+    Corresponds to these args, used variously below:
+    (swd, sed, nwd, ned, swu, seu, nwu, neu)
   *)
 
   let default_leaf_size = 16
@@ -58,10 +65,6 @@ struct
   let all_octants =
     List.init (max_octant + 1) (fun i -> octant_of_enum i |> Option.get)
 
-  (*
-    joinStep :: (Enum a1, Enum a3, Enum a2, Enum a) => (a1, a2, a3) -> a
-    joinStep (cx, cy, cz) = toEnum (fromEnum cx + 2 * fromEnum cy + 4 * fromEnum cz)
-  *)
   let octant_of_flags (cx, cy, cz) =
     let o = Bool.to_int cx + (2 * Bool.to_int cy) + (4 * Bool.to_int cz) in
     octant_of_enum @@ o |> Option.get
@@ -72,14 +75,6 @@ struct
 
   (*
     gives octant of a first vector relative to the second vector as a center
-
-    can we say x:N-S, y:E-W, z:U-D?
-
-    cmp :: V3 Double -> V3 Double -> ODir
-    cmp ca cb = joinStep (cx, cy, cz)
-      where cx = v3x ca >= v3x cb
-            cy = v3y ca >= v3y cb
-            cz = v3z ca >= v3z cb
   *)
   let relative_octant ca cb =
     let cx = V3.x ca >= V3.x cb
@@ -293,7 +288,7 @@ struct
     Key optimizations:
     1. Visit the octant containing the query point first (most likely to have nearest)
     2. Prune octants whose closest point is farther than current best
-    3. No heap allocation - pure recursive traversal
+    3. Pure recursive traversal avoids heap allocations of a PQ
   *)
 
   let[@inline] cube_dist_sq px py pz cx cy cz hs =

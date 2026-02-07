@@ -30,7 +30,7 @@ module type VEC3 = sig
   val sub : t -> t -> t
   (** [sub u v] is the vector subtraction [u - v]. *)
 
-  val mul : t -> t -> t
+  (* val mul : t -> t -> t *)
   (** [mul u v] is the component wise multiplication [u * v]. *)
 
   val div : t -> t -> t
@@ -45,7 +45,7 @@ module type VEC3 = sig
   val pp : Format.formatter -> t -> unit
   (** [pp ppf v] prints a textual representation of [v] on [ppf]. *)
 
-  val compare : t -> t -> int
+  (* val compare : t -> t -> int *)
   (** [compare u v] is [Stdlib.compare u v]. *)
 end
 

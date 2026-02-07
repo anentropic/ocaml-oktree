@@ -46,7 +46,7 @@ Format.printf "%a" V3.pp nearest;;
 
 Interface:
 
-- `Okt.of_list` builds a tree from list of points; `~leaf_size` controls max points per leaf before splitting.
+- `Okt.of_list` builds a tree from list of points; `~leaf_size` controls max points per leaf before splitting (optional, default: `16`).
 - `Okt.nearest` finds the closest point in the tree to a given query point.
 - `Okt.insert` returns a new tree with the point added.
 - `Okt.to_list` returns list of points in tree.
