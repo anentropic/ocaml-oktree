@@ -23,7 +23,13 @@ jobs:
           ocaml-compiler: "${{ matrix.ocaml-version }}"
           dune-cache: true
 
-      - name: Install dependencies
+      - name: Install library dependencies
+        run: opam install . --deps-only --yes
+
+      - name: Build library
+        run: opam exec -- dune build
+
+      - name: Install test dependencies
         run: opam install . --deps-only --with-test --yes
 
       - name: Run tests
