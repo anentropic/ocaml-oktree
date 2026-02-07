@@ -1,8 +1,10 @@
 (*
-  A type for the points in our octree
+  A type for the points in our octree.
 
-  Will essentially be a vector of three floats
-  e.g. https://erratique.ch/software/gg/doc/Gg/V3/
+  (Will essentially be a vector of three floats)
+
+  Deliberately designed to be compatible with:
+  https://erratique.ch/software/gg/doc/Gg/V3/
 *)
 module type VEC3 = sig
   type t
@@ -47,22 +49,25 @@ module type VEC3 = sig
   (** [compare u v] is [Stdlib.compare u v]. *)
 end
 
-(* public interface for Oktrees *)
-module type OKTREE = sig
+module type S = sig
   type vec3
   type t
-  type tree
-  type node
 
   val pp : Format.formatter -> t -> unit
-  val pp_tree : Format.formatter -> tree -> unit
-  val pp_node : Format.formatter -> node -> unit
+
   val insert : t -> vec3 -> t
   val of_list : ?leaf_size:int -> vec3 list -> t
-  val to_list : tree -> vec3 list
-  val tree_of : t -> tree
+  val to_list : t -> vec3 list
 
-  val nearest : tree -> vec3 -> vec3
-  val print_centres : ?label:string -> tree -> unit
-  val print_centre_distances : ?label:string -> tree -> vec3 -> unit
+  val nearest : t -> vec3 -> vec3
+end
+
+module type MAKER = functor (V3 : VEC3) -> S with type vec3 = V3.t
+
+module type Intf = sig
+  module type VEC3 = VEC3
+  module type S = S
+  module type MAKER = MAKER
+
+  module Make : MAKER
 end

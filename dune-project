@@ -34,6 +34,9 @@
   (ocamlformat :with-dev-setup)
   (ocp-indent :with-dev-setup)
 
+  ; dev deps for REPL 
+  (utop :with-dev-setup)
+
   ; docs
   (odoc :with-doc)
  ))
