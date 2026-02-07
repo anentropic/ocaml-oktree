@@ -38,19 +38,39 @@ struct
   [@@deriving show, map, fold, iter]
 
   (*
-    Octant tuple structure:
-    octant  index  bits
-    x0_y0_z0: 0 | 0 0 0
-    x0_y0_z1: 1 | 0 0 1
-    x0_y1_z0: 2 | 0 1 0
-    x0_y1_z1: 3 | 0 1 1
-    x1_y0_z0: 4 | 1 0 0
-    x1_y0_z1: 5 | 1 0 1
-    x1_y1_z0: 6 | 1 1 0
-    x1_y1_z1: 7 | 1 1 1
+    Octant tuple structure and mapping to `Node` fields
 
-    Corresponds to these args, used variously below:
-    (swd, sed, nwd, ned, swu, seu, nwu, neu)
+    Bit encoding (x=bit0, y=bit1, z=bit2) and enum names:
+      x0_y0_z0: 0 (000) -> SWD
+      x0_y0_z1: 1 (001) -> SED
+      x0_y1_z0: 2 (010) -> NWD
+      x0_y1_z1: 3 (011) -> NED
+      x1_y0_z0: 4 (100) -> SWU
+      x1_y0_z1: 5 (101) -> SEU
+      x1_y1_z0: 6 (110) -> NWU
+      x1_y1_z1: 7 (111) -> NEU
+
+    The code uses 8-tuples in this order everywhere:
+      (swd, sed, nwd, ned, swu, seu, nwu, neu)
+
+    After `tmap8 f` these names are bound to the tuple elements. When a
+    `Node` is constructed in `split_by'` the tuple elements are assigned to
+    record fields as follows (showing both ordinal and zero-based index):
+
+      nwu <- 7th element (index 6)
+      nwd <- 3rd element (index 2)
+      neu <- 8th element (index 7)
+      ned <- 4th element (index 3)
+      swu <- 5th element (index 4)
+      swd <- 1st element (index 0)
+      seu <- 6th element (index 5)
+      sed <- 2nd element (index 1)
+
+    (i.e. Node { centre; half_size; nwu; nwd; neu; ned; swu; swd; seu; sed })
+
+    Important: when creating or consuming these 8-tuples keep the above
+    ordering consistent — `tmap8`, `split_by`, `split_by'`, and
+    `child_of_octant` all rely on it.
   *)
 
   let default_leaf_size = 16
@@ -98,6 +118,21 @@ struct
         | NWU -> (swd, sed, nwd, ned, swu, seu, pt :: nwu, neu)
         | NEU -> (swd, sed, nwd, ned, swu, seu, nwu, pt :: neu))
 
+  (*
+    Mapping diagram for the 8-tuple used here:
+      tuple = (swd, sed, nwd, ned, swu, seu, nwu, neu)
+      indexes:  0    1    2    3    4    5    6    7
+
+    Node field assignment (shown in the `Node` constructor below):
+      nwu <- tuple[6]
+      nwd <- tuple[2]
+      neu <- tuple[7]
+      ned <- tuple[3]
+      swu <- tuple[4]
+      swd <- tuple[0]
+      seu <- tuple[5]
+      sed <- tuple[1]
+  *)
   let split_by' f centre half_size (swd, sed, nwd, ned, swu, seu, nwu, neu) =
     let swd, sed, nwd, ned, swu, seu, nwu, neu =
       tmap8 f (swd, sed, nwd, ned, swu, seu, nwu, neu)
@@ -234,27 +269,27 @@ struct
     | Node node -> to_list' (children_of_node node)
 
   (*
-    NOTE: the returned 'octant' no longer represents an octant
-    per se but one of 8 derived possibilities
-    ...this is a confusing overloading!
-    ...but it saves creating another 8 member variant and
-      identical join/split functions 
+    Octant usage and `point_pos` behaviour
 
-    we can see in [octant_distance'] below what they mean
-    i.e. NEU means pt is "in the tested octant"
+    - The `octant` variants are used as compact 3-bit descriptors (bit0=x,
+      bit1=y, bit2=z). A bit value of 1 denotes the "positive" half along
+      that axis. `octant_to_flags` / `octant_of_flags` convert between the
+      enum and a (x,y,z) boolean triple.
 
-    The boolean checks expand out like:
-      true != (not false) -> false
-      false != (not false) -> true
-      true != (not true) -> true
-      false != (not true) -> false
+    - `point_pos dp octant` tests the vector `dp` (point minus centre) against
+      the bitmask described by `octant`. The function returns a *derived*
+      octant that describes which side(s) of the tested region `dp` lies in;
+      this derived octant is then used by `octant_distance'` to choose a
+      distance computation (plane, edge, or vertex distance).
 
-    so to get NEU we need:
-      x >= 0 and u = true  -> confirmed in the +x octant
-      x < 0  and u = false -> confirmed in the -x octant
-      etc
+    - Example: `NEU` means (+x, +y, +z) — the point lies inside that child.
+      When some bits are unset the derived octant encodes face/edge/corner
+      relationships used for closest-point distance calculations.
 
-    and then when fewer bits are set we get the other options
+    - Rationale: reusing the `octant` enum avoids defining a separate enum for
+      the distance-test cases. The code intentionally overloads the enum as a
+      compact 3-bit descriptor; `point_pos` performs the boolean tests that
+      produce the derived descriptor used by `octant_distance'`.
   *)
   let point_pos dp octant =
     let u, v, w = octant_to_flags octant in
