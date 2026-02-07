@@ -7,11 +7,11 @@ on:
       - main
 
 jobs:
-  test:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -22,8 +22,7 @@ jobs:
       - name: Install dependencies
         run: opam install . --deps-only --with-test --yes
 
+      - uses: j178/prek-action@v1
+
       - name: Run tests
         run: opam exec -- dune test
-
-  # TODO add linting job using pre-commit config
-
