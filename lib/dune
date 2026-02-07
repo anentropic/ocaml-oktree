@@ -17,9 +17,17 @@
  (public_name oktree.visualise)
  (modules visualise)
  (optional)
+ (enabled_if
+  (= %{profile} visualise))
  (libraries oplot))
 
 (env
  (dev
+  (flags
+   (:standard -warn-error -A)))
+ (test
+  (flags
+   (:standard -warn-error -A)))
+ (visualise
   (flags
    (:standard -warn-error -A))))

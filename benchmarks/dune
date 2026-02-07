@@ -8,4 +8,7 @@
 (env
  (dev
   (flags
+   (:standard -warn-error -A)))
+ (test
+  (flags
    (:standard -warn-error -A))))

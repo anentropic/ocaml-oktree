@@ -1,10 +1,15 @@
 (test
  (name test_oktree)
+ (build_if
+  (= %{profile} test))
  (preprocess
   (pps ppx_deriving.show ppx_deriving_popper))
  (libraries popper gg oktree))
 
 (env
  (dev
+  (flags
+   (:standard -warn-error -A)))
+ (test
   (flags
    (:standard -warn-error -A))))

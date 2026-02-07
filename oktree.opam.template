@@ -1,0 +1,27 @@
+# Extra opam fields not expressible in dune-project.
+# This file is merged into oktree.opam during opam file generation.
+
+build: [
+  ["dune" "subst"] {dev}
+  [
+    "dune"
+    "build"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@install"
+    "@doc" {with-doc}
+  ]
+  [
+    "dune"
+    "build"
+    "--profile"
+    "test"
+    "-p"
+    name
+    "-j"
+    jobs
+    "@runtest"
+  ] {with-test}
+]

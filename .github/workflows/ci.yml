@@ -33,7 +33,7 @@ jobs:
         run: opam install . --deps-only --with-test --yes
 
       - name: Run tests
-        run: opam exec -- dune test
+        run: opam exec -- dune test --profile test --force
 
   lint:
     runs-on: ubuntu-latest
@@ -44,7 +44,7 @@ jobs:
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
-          ocaml-compiler: "5.3"
+          ocaml-compiler: 5
           dune-cache: true
 
       - name: Install dependencies
