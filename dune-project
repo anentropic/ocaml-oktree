@@ -1,6 +1,6 @@
-(lang dune 3.5)
+(lang dune 3.9)
 (name oktree)
-(version 0.1.0)
+(version 0.2.0)
 
 (generate_opam_files true)
 
@@ -19,7 +19,7 @@
   oplot)
  (depends
   ; core deps
-  (ocaml (>= 5.3))
+  (ocaml (>= 4.14))
   ppx_deriving
 
   ; test and benchmark deps

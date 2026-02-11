@@ -9,7 +9,7 @@ OKtree is a simple octree implementation in OCaml, intended to efficiently find 
 The original use case for this lib was finding nearest match in a palette of RGB colours.
 
 - Aims to be faster than not using an octree, does not claim to be world's fastest octree.
-- Fast insertions etc are not a goal. Use-case is: create a tree once, match points many times.
+- Fast insertions are not a goal. Use-case is: create a tree once, match points many times.
 
 ## Basic usage
 

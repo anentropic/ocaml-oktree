@@ -22,4 +22,10 @@
 (env
  (dev
   (flags
+   (:standard -warn-error -A)))
+ (test
+  (flags
+   (:standard -warn-error -A)))
+ (visualise
+  (flags
    (:standard -warn-error -A))))

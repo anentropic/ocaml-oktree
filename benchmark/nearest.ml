@@ -2,8 +2,9 @@ open Gg
 open Core_bench
 
 (*
-  dune build --profile=test
-  dune exec --profile=test benchmarks/nearest.exe -- -quota 3 -stabilize-gc
+  NOTE: only OCaml 5+ due to incompatibility with older Core_bench/Core_unix
+  dune build @runtest
+  dune exec benchmark/nearest.exe -- -quota 3 -stabilize-gc
 *)
 
 module O = Oktree.Make (V3)
