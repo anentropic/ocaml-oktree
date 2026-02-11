@@ -3,7 +3,8 @@
 (alias
  (name default)
  (deps
-  (alias_rec lib/all)))
+  (alias_rec lib/all)
+  (file "oktree.opam")))
 
 (alias
  (name runtest)
