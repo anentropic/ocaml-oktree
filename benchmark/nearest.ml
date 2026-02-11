@@ -2,6 +2,7 @@ open Gg
 open Core_bench
 
 (*
+  NOTE: only OCaml 5+ due to incompatibility with older Core_bench/Core_unix
   dune build @runtest
   dune exec benchmark/nearest.exe -- -quota 3 -stabilize-gc
 *)
