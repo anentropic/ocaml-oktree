@@ -14,7 +14,7 @@ To build the `oktree.visualise` library, install `oplot`:
 
 ```sh
 opam install oplot
-dune clean && dune build && dune build --profile test
+dune clean && dune build && dune build @runtest
 ```
 
 ## VS Code
@@ -34,7 +34,7 @@ dune utop
 Run tests with:
 
 ```sh
-dune test --profile test
+dune test
 ```
 
 NOTE: this will produce no output if tests have already been run with no code changes to be compiled.

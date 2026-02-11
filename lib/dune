@@ -17,8 +17,6 @@
  (public_name oktree.visualise)
  (modules visualise)
  (optional)
- (enabled_if
-  (= %{profile} visualise))
  (libraries oplot))
 
 (env

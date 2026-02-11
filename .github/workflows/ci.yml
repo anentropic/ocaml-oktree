@@ -33,7 +33,7 @@ jobs:
         run: opam install . --deps-only --with-test --yes
 
       - name: Run tests
-        run: opam exec -- dune test --profile test --force
+        run: opam exec -- dune test --force
 
   lint:
     runs-on: ubuntu-latest

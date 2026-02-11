@@ -1,9 +1,7 @@
 (executable
  (name nearest)
  (modules nearest)
- (libraries core_bench core_unix gg oktree)
- (enabled_if
-  (= %{profile} test)))
+ (libraries core_bench core_unix gg oktree))
 
 (env
  (dev
