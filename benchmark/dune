@@ -1,6 +1,7 @@
 (executable
  (name nearest)
  (modules nearest)
+ (public_name benchmark)
  (enabled_if
   (>= %{ocaml_version} 5.0.0))
  (libraries core_bench core_unix gg oktree))

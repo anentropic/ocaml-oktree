@@ -33,6 +33,7 @@
   ; opam install . --deps-only --with-dev-setup
   (ocamlformat :with-dev-setup)
   (ocp-indent :with-dev-setup)
+  (opam-publish :with-dev-setup)
 
   ; dev deps for REPL 
   (utop :with-dev-setup)

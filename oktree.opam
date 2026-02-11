@@ -19,14 +19,11 @@ depends: [
   "core_unix" {with-test & >= "0.15.0"}
   "ocamlformat" {with-dev-setup}
   "ocp-indent" {with-dev-setup}
+  "opam-publish" {with-dev-setup}
   "utop" {with-dev-setup}
   "odoc" {with-doc}
 ]
 depopts: ["oplot"]
-dev-repo: "git+https://github.com/anentropic/ocaml-oktree.git"
-# Extra opam fields not expressible in dune-project.
-# This file is merged into oktree.opam during opam file generation.
-
 build: [
   ["dune" "subst"] {dev}
   [
@@ -37,17 +34,8 @@ build: [
     "-j"
     jobs
     "@install"
+    "@runtest" {with-test}
     "@doc" {with-doc}
   ]
-  [
-    "dune"
-    "build"
-    "--profile"
-    "test"
-    "-p"
-    name
-    "-j"
-    jobs
-    "@runtest"
-  ] {with-test}
 ]
+dev-repo: "git+https://github.com/anentropic/ocaml-oktree.git"
