@@ -1,6 +1,6 @@
 (lang dune 3.9)
 (name oktree)
-(version 0.2.1)
+(version 0.2.2)
 
 (generate_opam_files true)
 
@@ -22,22 +22,23 @@
   (ocaml (>= 4.14))
   ppx_deriving
 
-  ; test and benchmark deps
+  ; test deps
   ; opam install . --deps-only --with-test
   (ppx_deriving_popper (and :with-test (>= 0.1.1)))
   (gg (and :with-test (>= 1.0)))
-  (core_bench (and :with-test (>= 0.15.0)))
-  (core_unix (and :with-test (>= 0.15.0)))
 
-  ; dev deps (for pre-commit hooks: formatting and build)
+  ; dev deps
   ; opam install . --deps-only --with-dev-setup
+  ; - for pre-commit hooks: formatting and build
   (ocamlformat :with-dev-setup)
   (ocp-indent :with-dev-setup)
   (opam-publish :with-dev-setup)
-
-  ; dev deps for REPL 
+  ; - for benchmark suite
+  (core_bench (and :with-dev-setup (>= 0.15.0)))
+  (core_unix (and :with-dev-setup (>= 0.15.0)))
+  ; - for REPL 
   (utop :with-dev-setup)
 
-  ; docs
+  ; docs deps
   (odoc :with-doc)
  ))

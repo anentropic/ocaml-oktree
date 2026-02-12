@@ -1,15 +1,19 @@
 (executable
- (name nearest)
- (modules nearest)
- (public_name benchmark)
+ (name benchmark)
+ (modules benchmark)
  (enabled_if
-  (>= %{ocaml_version} 5.0.0))
+  (>= %{ocaml_version} 5.1.0))
  (libraries core_bench core_unix gg oktree))
 
+(rule
+ (alias benchmark)
+ (action
+  (run %{exe:benchmark.exe} -quota 3 -stabilize-gc)))
+
 (env
- (dev
+ (dev ; default profile for `dune build`
   (flags
    (:standard -warn-error -A)))
- (test
+ (test ; default profile for `dune test`
   (flags
    (:standard -warn-error -A))))
