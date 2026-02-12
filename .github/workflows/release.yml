@@ -10,7 +10,6 @@ on:
 
 permissions:
   contents: write
-  pull-requests: write
 
 jobs:
   # TODO: should release be when tag is pushed instead of all pushes to main?
