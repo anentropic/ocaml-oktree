@@ -9,5 +9,9 @@
 (alias
  (name runtest)
  (deps
-  (alias_rec test/all)
+  (alias_rec test/all)))
+
+(alias
+ (name benchmark)
+ (deps
   (alias_rec benchmark/all)))
