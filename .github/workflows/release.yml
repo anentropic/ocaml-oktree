@@ -17,41 +17,84 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      # Checkout the exact commit that passed CI, including all history and tags
+      # for version comparison
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
 
+      # Extract the current package version from the .opam file
+      # This is the source of truth for the version that will be released
       - name: Extract version
         id: version
         run: |
-          version=$(grep -E '^\(version ' dune-project | sed -E 's/^\(version ([^\)]+)\).*/\1/')
+          version=$(grep -E '^version:' oktree.opam | head -n1 | sed -E 's/^version: "([^"]+)".*/\1/')
           if [ -z "$version" ]; then
-            echo "Version not found in dune-project" >&2
+            echo "Version not found in oktree.opam" >&2
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Check tag exists
-        id: tag_check
+      # Determine if a release is needed by comparing the current version against
+      # the latest v* tag. Release if no prior tag exists or version is greater.
+      - name: Check release required
+        id: release_check
         run: |
-          if git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
+          latest_tag=$(git tag -l 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$latest_tag" ]; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=no prior tag" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
+          latest_version="${latest_tag#v}"
+          if dpkg --compare-versions "${{ steps.version.outputs.version }}" gt "$latest_version"; then
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "reason=version bump" >> "$GITHUB_OUTPUT"
+          else
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "reason=no version bump" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Create and push a git tag for the new version (e.g., v1.2.3)
       - name: Create tag
-        if: steps.tag_check.outputs.exists != 'true'
+        if: steps.release_check.outputs.release == 'true'
         run: |
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
+      # Create a GitHub release with auto-generated release notes from commits
       - name: Create GitHub Release
-        if: steps.tag_check.outputs.exists != 'true'
+        if: steps.release_check.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
 
-    # TODO add steps to publish to opam
+      # Set up OCaml environment with compiler version 5 for opam-publish
+      - name: Set up OCaml
+        if: steps.release_check.outputs.release == 'true'
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5
+
+      # Install the opam-publish tool used to submit packages to opam-repository
+      - name: Install opam-publish
+        if: steps.release_check.outputs.release == 'true'
+        run: opam install opam-publish --yes
+
+      # Submit a pull request to ocaml/opam-repository to publish the package
+      # Uses a separate GitHub token with permissions to create PRs in external repos
+      - name: Publish to opam-repository
+        if: steps.release_check.outputs.release == 'true'
+        env:
+          OPAM_PUBLISH_GH_TOKEN: ${{ secrets.OPAM_PUBLISH_GH_TOKEN }}
+        run: |
+          opam exec -- opam-publish \
+            --no-confirmation \
+            --no-browser \
+            --tag "v${{ steps.version.outputs.version }}" \
+            --repo ocaml/opam-repository \
+            .
