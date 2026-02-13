@@ -29,16 +29,25 @@
 
   ; dev deps
   ; opam install . --deps-only --with-dev-setup
-  ; - for pre-commit hooks: formatting and build
   (ocamlformat :with-dev-setup)
   (ocp-indent :with-dev-setup)
   (opam-publish :with-dev-setup)
+  (ocaml-lsp-server :with-dev-setup)
   ; - for benchmark suite
   (core_bench (and :with-dev-setup (>= 0.15.0)))
   (core_unix (and :with-dev-setup (>= 0.15.0)))
-  ; - for REPL 
+  (landmarks :with-dev-setup)
+  (landmarks-ppx :with-dev-setup)
+  ; - for REPL
   (utop :with-dev-setup)
 
   ; docs deps
   (odoc :with-doc)
  ))
+
+ (pin
+  (url git+https://github.com/LexiFi/landmarks.git#df896c4) ; until 1.6 is published
+  (package
+    (name landmarks-ppx)
+    (version 1.6.alpha))
+ )

@@ -3,12 +3,26 @@
  (modules benchmark)
  (enabled_if
   (>= %{ocaml_version} 5.1.0))
+ ; Core libs compatibility
  (libraries core_bench core_unix gg oktree))
+
+(executable
+ (name profile)
+ (modules profile)
+ (instrumentation
+  (backend landmarks))
+ (libraries gg landmarks oktree))
 
 (rule
  (alias benchmark)
  (action
   (run %{exe:benchmark.exe} -quota 3 -stabilize-gc)))
+
+(rule
+ (alias profile)
+ (deps (universe)) ; always run even if no source files have changed
+ (action
+  (run %{exe:profile.exe})))
 
 (env
  (dev ; default profile for `dune build`

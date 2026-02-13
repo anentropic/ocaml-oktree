@@ -2,6 +2,8 @@
  (name oktree)
  (public_name oktree)
  (modules oktree oktree_intf)
+ (instrumentation
+  (backend landmarks))
  (preprocess
   (pps
    ppx_deriving.show

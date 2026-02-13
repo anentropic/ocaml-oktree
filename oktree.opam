@@ -18,8 +18,11 @@ depends: [
   "ocamlformat" {with-dev-setup}
   "ocp-indent" {with-dev-setup}
   "opam-publish" {with-dev-setup}
+  "ocaml-lsp-server" {with-dev-setup}
   "core_bench" {with-dev-setup & >= "0.15.0"}
   "core_unix" {with-dev-setup & >= "0.15.0"}
+  "landmarks" {with-dev-setup}
+  "landmarks-ppx" {with-dev-setup}
   "utop" {with-dev-setup}
   "odoc" {with-doc}
 ]
@@ -39,3 +42,6 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/anentropic/ocaml-oktree.git"
+pin-depends: [
+  [ "landmarks-ppx.1.6.alpha" "git+https://github.com/LexiFi/landmarks.git#df896c4" ]
+]

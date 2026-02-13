@@ -1,0 +1,3 @@
+pin-depends: [
+  [ "landmarks-ppx.1.6.alpha" "git+https://github.com/LexiFi/landmarks.git#df896c4" ]
+]
