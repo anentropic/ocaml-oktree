@@ -42,3 +42,6 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/anentropic/ocaml-oktree.git"
+pin-depends: [
+  [ "landmarks-ppx.1.6.alpha" "git+https://github.com/LexiFi/landmarks.git#df896c4" ]
+]
