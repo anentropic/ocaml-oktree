@@ -251,11 +251,6 @@ struct
   (* Euclidean distance. Always positive (i.e. has no direction) *)
   let distance a b = V3.sub a b |> V3.norm
 
-  let distance_sq_coords px py pz pt =
-    let dx = V3.x pt -. px in
-    let dy = V3.y pt -. py in
-    let dz = V3.z pt -. pz in
-    (dx *. dx) +. (dy *. dy) +. (dz *. dz)
   let rec to_list' children =
     List.concat_map
       (function
@@ -339,9 +334,18 @@ struct
     let rec loop best_d2 best_pt = function
       | [] -> (best_d2, best_pt)
       | pt :: rest ->
-        let d2 = distance_sq_coords px py pz pt in
-        if d2 < best_d2 then loop d2 (Some pt) rest
-        else loop best_d2 best_pt rest
+        let dx = V3.x pt -. px in
+        let dx2 = dx *. dx in
+        if dx2 >= best_d2 then loop best_d2 best_pt rest
+        else
+          let dy = V3.y pt -. py in
+          let dxy2 = dx2 +. (dy *. dy) in
+          if dxy2 >= best_d2 then loop best_d2 best_pt rest
+          else
+            let dz = V3.z pt -. pz in
+            let d2 = dxy2 +. (dz *. dz) in
+            if d2 < best_d2 then loop d2 (Some pt) rest
+            else loop best_d2 best_pt rest
     in
     loop best_d2 best_pt points
 
