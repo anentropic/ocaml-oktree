@@ -17,12 +17,16 @@ jobs:
     if: ${{ github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
+      # Checkout the exact commit that passed CI, including all history and tags
+      # for version comparison
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
 
+      # Extract the current package version from the .opam file
+      # This is the source of truth for the version that will be released
       - name: Extract version
         id: version
         run: |
@@ -33,6 +37,8 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # Determine if a release is needed by comparing the current version against
+      # the latest v* tag. Release if no prior tag exists or version is greater.
       - name: Check release required
         id: release_check
         run: |
@@ -52,12 +58,14 @@ jobs:
             echo "reason=no version bump" >> "$GITHUB_OUTPUT"
           fi
 
+      # Create and push a git tag for the new version (e.g., v1.2.3)
       - name: Create tag
         if: steps.release_check.outputs.release == 'true'
         run: |
           git tag "v${{ steps.version.outputs.version }}"
           git push origin "v${{ steps.version.outputs.version }}"
 
+      # Create a GitHub release with auto-generated release notes from commits
       - name: Create GitHub Release
         if: steps.release_check.outputs.release == 'true'
         uses: softprops/action-gh-release@v2
@@ -65,16 +73,20 @@ jobs:
           tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
 
+      # Set up OCaml environment with compiler version 5 for opam-publish
       - name: Set up OCaml
         if: steps.release_check.outputs.release == 'true'
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: 5
 
+      # Install the opam-publish tool used to submit packages to opam-repository
       - name: Install opam-publish
         if: steps.release_check.outputs.release == 'true'
         run: opam install opam-publish --yes
 
+      # Submit a pull request to ocaml/opam-repository to publish the package
+      # Uses a separate GitHub token with permissions to create PRs in external repos
       - name: Publish to opam-repository
         if: steps.release_check.outputs.release == 'true'
         env:
