@@ -53,9 +53,6 @@ dune clean && OCAML_LANDMARKS=auto dune build --instrument-with landmarks @profi
 This is intended for developers only. It does **not** affect normal builds, and
 it is **not** required for users of the published library.
 
-`off` keeps runtime profiling disabled at startup so setup code is excluded. The
-program then explicitly starts profiling only around nearest-query execution.
-
 Defaults used by `benchmark/profile.ml`:
 
 - `--n-points 4096`
