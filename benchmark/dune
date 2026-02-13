@@ -3,7 +3,7 @@
  (modules benchmark)
  (enabled_if
   (>= %{ocaml_version} 5.1.0))
- ; Core libs comptibility
+ ; Core libs compatibility
  (libraries core_bench core_unix gg oktree))
 
 (executable
