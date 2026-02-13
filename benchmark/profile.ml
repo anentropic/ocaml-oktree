@@ -42,7 +42,9 @@ let parse_args () =
   (!n_points, !n_queries, seed)
 
 let gaussian rng =
+  let epsilon = 1e-12 in
   let u1 = Random.State.float rng 1. in
+  let u1 = if u1 <= 0. then epsilon else u1 in
   let u2 = Random.State.float rng 1. in
   sqrt (-2. *. log u1) *. cos (2. *. Float.pi *. u2)
 
