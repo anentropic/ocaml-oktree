@@ -44,10 +44,3 @@
   ; docs deps
   (odoc :with-doc)
  ))
-
- (pin
-  (url git+https://github.com/LexiFi/landmarks.git#df896c4) ; until 1.6 is published
-  (package
-    (name landmarks-ppx)
-    (version 1.6.alpha))
- )

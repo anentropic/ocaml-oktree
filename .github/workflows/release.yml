@@ -20,7 +20,7 @@ jobs:
       # Checkout the exact commit that passed CI, including all history and tags
       # for version comparison
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -38,10 +38,15 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       # Determine if a release is needed by comparing the current version against
-      # the latest v* tag. Release if no prior tag exists or version is greater.
+      # the latest v* tag.
+      # - Release if no prior tag exists.
+      # - Release if version is greater than latest tag (normal release).
+      # - If version matches latest tag, release only when that package version
+      #   is not yet present in ocaml/opam-repository (amended release).
       - name: Check release required
         id: release_check
         run: |
+          current_version="${{ steps.version.outputs.version }}"
           latest_tag=$(git tag -l 'v*' --sort=-v:refname | head -n1)
           if [ -z "$latest_tag" ]; then
             echo "release=true" >> "$GITHUB_OUTPUT"
@@ -50,20 +55,36 @@ jobs:
           fi
 
           latest_version="${latest_tag#v}"
-          if dpkg --compare-versions "${{ steps.version.outputs.version }}" gt "$latest_version"; then
+          if dpkg --compare-versions "$current_version" gt "$latest_version"; then
             echo "release=true" >> "$GITHUB_OUTPUT"
             echo "reason=version bump" >> "$GITHUB_OUTPUT"
+          elif dpkg --compare-versions "$current_version" eq "$latest_version"; then
+            opam_pkg_url="https://raw.githubusercontent.com/ocaml/opam-repository/master/packages/oktree/oktree.${current_version}/opam"
+            if curl -fsSL "$opam_pkg_url" >/dev/null; then
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              echo "reason=already published in opam-repository" >> "$GITHUB_OUTPUT"
+            else
+              echo "release=true" >> "$GITHUB_OUTPUT"
+              echo "reason=amended release" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "release=false" >> "$GITHUB_OUTPUT"
             echo "reason=no version bump" >> "$GITHUB_OUTPUT"
           fi
 
-      # Create and push a git tag for the new version (e.g., v1.2.3)
+      # Log release decision for easier debugging/auditing in workflow output
+      - name: Decision summary
+        run: |
+          echo "release=${{ steps.release_check.outputs.release }}"
+          echo "reason=${{ steps.release_check.outputs.reason }}"
+          echo "version=${{ steps.version.outputs.version }}"
+
+      # Create/update and push a git tag for the version (e.g., v1.2.3)
       - name: Create tag
         if: steps.release_check.outputs.release == 'true'
         run: |
-          git tag "v${{ steps.version.outputs.version }}"
-          git push origin "v${{ steps.version.outputs.version }}"
+          git tag -f "v${{ steps.version.outputs.version }}"
+          git push --force origin "refs/tags/v${{ steps.version.outputs.version }}"
 
       # Create a GitHub release with auto-generated release notes from commits
       - name: Create GitHub Release

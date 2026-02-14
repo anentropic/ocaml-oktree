@@ -5,8 +5,11 @@ Initial set up:
 ```sh
 opam switch create .
 eval $(opam env)
+opam pin add landmarks-ppx git+https://github.com/LexiFi/landmarks.git#df896c4 --no-action
 opam install . --deps-only --with-dev-setup --with-test --with-doc
 ```
+
+(`landmarks` pin needed until version 1.6 released, see <https://github.com/LexiFi/landmarks/pull/45>)
 
 ### Optional: Visualise library
 
