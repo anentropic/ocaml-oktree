@@ -34,6 +34,17 @@ jobs:
 
       - name: Run tests
         run: opam exec -- dune test --force
+        env:
+          JUNIT_REPORT_PATH: ${{ github.workspace }}/_build/default/test/junit.xml
+          QCHECK_LONG: true
+          QCHECK_LONG_FACTOR: 100
+
+      - name: Publish test results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          check_name: Dune unit test results
+          files: _build/default/test/junit.xml
 
   lint:
     runs-on: ubuntu-latest
@@ -48,6 +59,6 @@ jobs:
           dune-cache: true
 
       - name: Install dependencies
-        run: opam install . --deps-only --with-dev-setup --with-test --with-doc --yes
+        run: opam install . --deps-only --with-dev-setup --yes
 
       - uses: j178/prek-action@v1

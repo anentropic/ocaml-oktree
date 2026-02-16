@@ -24,7 +24,10 @@
 
   ; test deps
   ; opam install . --deps-only --with-test
-  (ppx_deriving_popper (and :with-test (>= 0.1.1)))
+  (qcheck-core (and :with-test (>= 0.21)))
+  (qcheck-alcotest (and :with-test (>= 0.21)))
+  (alcotest (and :with-test (>= 1.7.0)))
+  (junit_alcotest (and :with-test (>= 2.0)))
   (gg (and :with-test (>= 1.0)))
 
   ; dev deps

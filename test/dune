@@ -1,8 +1,15 @@
 (test
  (name test_oktree)
  (preprocess
-  (pps ppx_deriving.show ppx_deriving_popper))
- (libraries popper gg oktree))
+  (pps ppx_deriving.show))
+ (libraries
+  qcheck-core
+  qcheck-alcotest
+  alcotest
+  junit_alcotest
+  junit
+  gg
+  oktree))
 
 (env
  (dev

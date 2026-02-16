@@ -13,7 +13,10 @@ depends: [
   "dune" {>= "3.6"}
   "ocaml" {>= "4.14"}
   "ppx_deriving"
-  "ppx_deriving_popper" {with-test & >= "0.1.1"}
+  "qcheck-core" {with-test & >= "0.21"}
+  "qcheck-alcotest" {with-test & >= "0.21"}
+  "alcotest" {with-test & >= "1.7.0"}
+  "junit_alcotest" {with-test & >= "2.0"}
   "gg" {with-test & >= "1.0"}
   "ocamlformat" {with-dev-setup}
   "ocp-indent" {with-dev-setup}
