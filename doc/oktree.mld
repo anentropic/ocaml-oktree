@@ -1,0 +1,243 @@
+{0 Oktree User Guide}
+
+This guide demonstrates how to use the Oktree library for efficient nearest neighbor search in 3D space.
+
+{1 Installation}
+
+Add to your dune file:
+{v
+(library
+ (name my_library)
+ (libraries oktree gg))
+v}
+
+Oktree is designed to work with the {{:https://erratique.ch/software/gg/doc/Gg/}Gg} library's [V3] module, though you can provide your own [VEC3] implementation.
+
+{1 Basic Usage}
+
+{2 Creating an Octree}
+
+The octree is built using a functor that takes a [VEC3] module:
+
+{[
+open Gg
+
+(* Instantiate the octree functor with Gg.V3 *)
+module Okt = Oktree.Make (V3)
+
+(* Create a list of 3D points *)
+let points = [
+  V3.v 0.0 0.0 0.0;
+  V3.v 1.0 0.0 0.0;
+  V3.v 0.0 1.0 0.0;
+  V3.v 0.0 0.0 1.0;
+]
+
+(* Build the tree *)
+let tree = Okt.of_list points
+]}
+
+{2 Finding Nearest Neighbors}
+
+Once the tree is built, query for nearest matches:
+
+{[
+(* Find the closest point to (0.1, 0.1, 0.1) *)
+let query = V3.v 0.1 0.1 0.1
+let nearest = Okt.nearest tree query
+(* nearest = V3.v 0.0 0.0 0.0 *)
+
+(* Find nearest to another point *)
+let query2 = V3.v 0.9 0.05 0.05
+let nearest2 = Okt.nearest tree query2
+(* nearest2 = V3.v 1.0 0.0 0.0 *)
+]}
+
+{1 Tuning Performance}
+
+{2 Leaf Size}
+
+The [~leaf_size] parameter controls when octree subdivision stops. Smaller values create deeper trees with more nodes but fewer points per leaf. Larger values create shallower trees.
+
+{[
+(* Small leaf size: more subdivision, faster queries for sparse data *)
+let tree_small = Okt.of_list ~leaf_size:4 points
+
+(* Large leaf size: less subdivision, faster construction *)
+let tree_large = Okt.of_list ~leaf_size:32 points
+
+(* Default is 16, which works well for most use cases *)
+let tree_default = Okt.of_list points
+]}
+
+Tuning guidelines:
+- Start with the default (16)
+- Use smaller values (4-8) for very sparse point distributions
+- Use larger values (32-64) when you have many clustered points
+- Profile with your actual data to find the optimum
+
+{1 Common Use Cases}
+
+{2 Color Quantization}
+
+Finding the nearest color in a palette:
+
+{[
+open Gg
+
+module Okt = Oktree.Make (V3)
+
+(* Define a palette of RGB colors as 3D points *)
+let palette = [
+  V3.v 1.0 0.0 0.0;  (* red *)
+  V3.v 0.0 1.0 0.0;  (* green *)
+  V3.v 0.0 0.0 1.0;  (* blue *)
+  V3.v 1.0 1.0 0.0;  (* yellow *)
+  V3.v 1.0 0.0 1.0;  (* magenta *)
+  V3.v 0.0 1.0 1.0;  (* cyan *)
+]
+
+let palette_tree = Okt.of_list ~leaf_size:8 palette
+
+(* Quantize an arbitrary color to the nearest palette color *)
+let quantize color = Okt.nearest palette_tree color
+
+(* Example: quantize orange to nearest palette color *)
+let orange = V3.v 1.0 0.5 0.0
+let quantized = quantize orange
+(* quantized = V3.v 1.0 0.0 0.0 (red) *)
+
+(* Quantize a purple-ish color *)
+let purple = V3.v 0.6 0.2 0.8
+let quantized2 = quantize purple
+(* quantized2 = V3.v 1.0 0.0 1.0 (magenta) *)
+]}
+
+{2 Batch Queries}
+
+When processing many queries, reuse the same tree:
+
+{[
+(* Build tree once *)
+let tree = Okt.of_list ~leaf_size:16 large_point_set
+
+(* Query many times *)
+let process_queries queries =
+  List.map (fun query ->
+    let nearest = Okt.nearest tree query in
+    (query, nearest)
+  ) queries
+
+let results = process_queries many_query_points
+]}
+
+{2 Incremental Updates}
+
+The tree is immutable, but you can insert new points:
+
+{[
+(* Start with initial points *)
+let tree = Okt.of_list initial_points
+
+(* Add a new point (returns new tree) *)
+let tree2 = Okt.insert tree new_point
+
+(* Add multiple points *)
+let tree3 = List.fold_left Okt.insert tree2 more_points
+]}
+
+Note: For bulk updates, it is more efficient to rebuild the tree with [of_list] than to insert points one by one.
+
+{1 Working with Different Vector Types}
+
+While Gg.V3 is recommended, you can use any type that implements the [VEC3] signature:
+
+{[
+module My_Vec3 : Oktree.VEC3 with type t = float * float * float = struct
+  type t = float * float * float
+
+  let x (x, _, _) = x
+  let y (_, y, _) = y
+  let z (_, _, z) = z
+
+  let of_tuple t = t
+  let to_tuple t = t
+
+  let add (x1, y1, z1) (x2, y2, z2) = (x1 +. x2, y1 +. y2, z1 +. z2)
+  let sub (x1, y1, z1) (x2, y2, z2) = (x1 -. x2, y1 -. y2, z1 -. z2)
+  let div (x1, y1, z1) (x2, y2, z2) = (x1 /. x2, y1 /. y2, z1 /. z2)
+
+  let map f (x, y, z) = (f x, f y, f z)
+
+  let norm (x, y, z) =
+    sqrt (x *. x +. y *. y +. z *. z)
+
+  let pp fmt (x, y, z) =
+    Format.fprintf fmt "(%g, %g, %g)" x y z
+end
+
+module Okt = Oktree.Make (My_Vec3)
+
+let tree = Okt.of_list [(0., 0., 0.); (1., 1., 1.)]
+let nearest = Okt.nearest tree (0.5, 0.5, 0.5)
+]}
+
+{1 Inspecting Trees}
+
+{2 Converting to Lists}
+
+Extract all points from a tree:
+
+{[
+let points = Okt.to_list tree
+(* Returns all points in the tree as a list *)
+
+(* Check how many points are in the tree *)
+let count = List.length points
+]}
+
+{2 Pretty Printing}
+
+Use the provided printer for debugging:
+
+{[
+(* Print tree structure *)
+Format.printf "%a@." Okt.pp tree
+
+(* Output shows the tree structure with leaf contents *)
+]}
+
+{1 Performance Characteristics}
+
+Construction:
+- [of_list]: O(n log n) where n is the number of points
+- [insert]: O(log n) but less efficient than bulk construction
+
+Queries:
+- [nearest]: O(log n) average case for well-distributed points
+- [nearest]: O(n) worst case for highly clustered points
+
+Space:
+- O(n) for the tree structure
+- Sparse representation (empty octants not stored)
+
+{1 Limitations and Considerations}
+
+The implementation is optimized for static or slowly-changing point sets:
+- Tree construction is relatively expensive
+- Queries are fast once the tree is built
+- Insertions create new tree structures (functional/persistent)
+
+Best used when:
+- You build the tree once and query many times
+- Points are reasonably well-distributed in 3D space
+- You need exact nearest neighbor (not approximate)
+
+Not ideal when:
+- You need frequent insertions/deletions
+- Points are highly clustered (consider preprocessing)
+- You can trade accuracy for speed (consider approximate methods)
+
+{1 API Reference}
+
+See the {{!Oktree}Oktree module} for the complete API documentation.

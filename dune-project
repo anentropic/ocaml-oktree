@@ -1,6 +1,6 @@
-(lang dune 3.9)
+(lang dune 3.6)
 (name oktree)
-(version 0.2.3)
+(version 0.2.4)
 
 (generate_opam_files true)
 
