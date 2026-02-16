@@ -67,6 +67,10 @@ v}
     - {!VEC3} - Vector interface with usage examples
     - {!S} - Octree operations with examples for [of_list], [nearest], [insert], etc.
     - {!Make} - Functor for creating octree instances
+
+    {1 Project}
+
+    - {{:https://github.com/anentropic/ocaml-oktree}GitHub repository}
 *)
 
 include Oktree_intf.Intf (** @inline *)
