@@ -1,5 +1,3 @@
-open Popper
-open Sample.Syntax
 module O = Oktree.Make (Gg.V3)
 
 let pp_vec3 fmt p =
@@ -11,65 +9,20 @@ let pp_point_list fmt =
   let ppl fmt' = Format.pp_print_list ~pp_sep pp_vec3 fmt' in
   Format.fprintf fmt "[%a]" ppl
 
-let strict_float_range low high =
-  let rec sample () =
-    let* x = Sample.Float.range low high in
-    if x < low || x > high then sample () else Sample.return x
-  in
-  sample ()
+let gen_ggv3 low high =
+  let open QCheck2.Gen in
+  let* x = float_range low high in
+  let* y = float_range low high in
+  let* z = float_range low high in
+  return (Gg.V3.v x y z)
 
-let expect_raises f exc_f pp =
-  let result_opt = try exc_f f with e -> Some (Error e) in
-  match result_opt with
-  | Some (Ok a) -> fail @@ Format.asprintf "Unexpected result: %a" pp a
-  | Some (Error e) ->
-    fail @@ Printf.sprintf "Unexpected error: %s" (Printexc.to_string e)
-  | None -> pass (* the correct result *)
+let ggv3_testable =
+  Alcotest.testable Gg.V3.pp (fun a b -> Gg.V3.compare a b = 0)
 
-let sample_ggv3 low high =
-  let* x = strict_float_range low high in
-  let* y = strict_float_range low high in
-  let* z = strict_float_range low high in
-  Sample.return (Gg.V3.v x y z)
-
-let compare_ggv3 = Comparator.make Gg.V3.compare Gg.V3.pp
 let sort_ggv3_list = List.sort Gg.V3.compare
-
-(* let compare_ggv3_opt =
-   let cmp a b =
-    match (a, b) with
-    | (Some a', Some b') -> Gg.V3.compare a' b'
-    | (Some _, None) -> 1
-    | (None, Some _) -> -1
-    | (None, None) -> 0
-   in
-   let pp fmt p = 
-    match p with
-    | Some p -> Format.fprintf fmt "Some %a" Gg.V3.pp p
-    | None -> ignore @@ Format.fprintf fmt (format_of_string "None")
-   in
-   Comparator.make cmp pp *)
-
-(* let compare_oktree_opt =
-   let cmp a b =
-    match (a, b) with
-    | (Some a', Some b') -> compare a' b'
-    | (Some _, None) -> 1
-    | (None, Some _) -> -1
-    | (None, None) -> 0
-   in
-   let pp fmt p = 
-    match p with
-    | Some _ -> Format.fprintf fmt (format_of_string "Some")
-    | None -> Format.fprintf fmt (format_of_string "None")
-   in
-   Comparator.make cmp pp *)
-
 let distance a b = Gg.V3.sub a b |> Gg.V3.norm
 
-type point_distance_list = (float * Gg.V3.t) list [@@deriving show]
-
-(* a brute force implementation as oracle *)
+(* brute force oracle *)
 let nearest points p =
   if List.length points = 0 then
     raise @@ Invalid_argument "nearest oracle: points list was empty"
@@ -77,67 +30,36 @@ let nearest points p =
     let sorted =
       List.map (fun p' -> (distance p' p, p')) points |> List.sort compare
     in
-    let* _ =
-      Sample.log_key_value "Oracle"
-      @@ Format.asprintf "%a" pp_point_distance_list sorted
-    in
     let _, result = List.hd sorted in
-    Sample.return result
+    result
 
 let from_tuples l = List.map (fun (x, y, z) -> Gg.V3.v x y z) l
 
-(* TESTS *)
+(* UNIT TESTS *)
 
-let test_of_list =
-  test @@ fun () ->
+let test_of_list () =
   let expected = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] |> sort_ggv3_list in
   let okt = O.of_list expected in
   let actual = O.to_list okt |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) actual expected
+  Alcotest.(check (list ggv3_testable)) "preserves points" expected actual
 
-let test_of_list_sample_nonempty =
-  test @@ fun () ->
-  let* points =
-    Sample.with_log "Sample points"
-      (fun fmt points' -> pp_point_list fmt points')
-      Sample.List.(non_empty @@ sample_ggv3 0. 1.)
-  in
-  let okt = O.of_list points in
-  let expected = points |> sort_ggv3_list in
-  let actual = O.to_list okt |> sort_ggv3_list in
-  ignore @@ equal Comparator.int (List.length expected) (List.length actual);
-  equal Comparator.(list compare_ggv3) actual expected
-
-let test_nearest_handpicked =
-  (* Hand-picked points + target sets *)
-  let make points target =
-    test @@ fun () ->
+let nearest_handpicked_tests =
+  let make (points, target) () =
     let okt = O.of_list points in
-    let* expected = nearest points target in
+    let expected = nearest points target in
     let result = O.nearest okt target in
-    let* _ =
-      Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
-    in
-    let* _ =
-      Sample.log_key_value "Expected distance"
-      @@ Float.to_string (distance target expected)
-    in
-    let* _ =
-      Sample.log_key_value "Result distance"
-      @@ Float.to_string (distance target result)
-    in
-    equal compare_ggv3 result expected
+    Alcotest.check ggv3_testable "nearest point" expected result
   in
   let args =
     [
-      ([Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2],
-       Gg.V3.v 0.24 0.24 0.24);
-      ([Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263],
-       Gg.V3.v 0.3333 0.41 0.6667);
-      ([Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422],
-       Gg.V3.v 0.3333 0.41 0.6667);
-      ([Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406],
-       Gg.V3.v 0.3333 0.41 0.6667);
+      ( [ Gg.V3.zero; Gg.V3.v 0. 0.251 0.; Gg.V3.v 0. 0.23 0.; Gg.V3.v 0.2 0.1 0.2 ],
+        Gg.V3.v 0.24 0.24 0.24 );
+      ( [ Gg.V3.v 0.22211 0.310896 0.380155; Gg.V3.v 0. 0. 0.; Gg.V3.v 0.154595 0.444363 0.909263 ],
+        Gg.V3.v 0.3333 0.41 0.6667 );
+      ( [ Gg.V3.v 0. 0.849467 0.16977; Gg.V3.v 0. 0. 0.175422 ],
+        Gg.V3.v 0.3333 0.41 0.6667 );
+      ( [ Gg.V3.v 0.0408104 0.120397 0.712801; Gg.V3.v 0.754196 0.425501 0.700406 ],
+        Gg.V3.v 0.3333 0.41 0.6667 );
       (*
         Copilot added this set, duplicates and all. Presumably to capture PBT cases that failed during dev:
       *)
@@ -175,114 +97,58 @@ let test_nearest_handpicked =
         Gg.V3.v 0.3333 0.41 0.6667 );
     ]
   in
-  suite
-  @@ List.mapi
-    (fun i (points, target) -> (Printf.sprintf "%i" i, make points target))
+  List.mapi
+    (fun i arg ->
+       Alcotest.test_case (Printf.sprintf "handpicked case %d vs brute-force oracle" i) `Quick (make arg))
     args
 
-let test_nearest_sample_nonempty =
-  let configs = [ Config.num_samples 5000; Config.seed [ 1 ] ] in
-  test ~config:(Config.all configs) @@ fun () ->
-  let* points =
-    Sample.with_log "Sample points" pp_point_list
-      Sample.List.(non_empty @@ sample_ggv3 0. 1.)
-  in
-  let target = Gg.V3.v 0.3333 0.41 0.6667 in
-  let* _ =
-    Sample.log_key_value "Length" (List.length points |> Int.to_string)
-  in
-  let okt = O.of_list points in
-  let* expected = nearest points target in
-  let result = O.nearest okt target in
-  let* _ =
-    Sample.log_key_value "Expected" (Format.asprintf "%a" Gg.V3.pp expected)
-  in
-  let* _ =
-    Sample.log_key_value "Expected distance"
-    @@ Float.to_string (distance target expected)
-  in
-  let* _ =
-    Sample.log_key_value "Result distance"
-    @@ Float.to_string (distance target result)
-  in
-  equal compare_ggv3 result expected
-
-let test_nearest_sample_empty =
-  test @@ fun () ->
+let test_nearest_sample_empty () =
   let okt = O.of_list [] in
   let p = Gg.V3.v 0.2 0.5 0.7 in
-  let exc_f f = try Some (Ok (f ())) with Not_found -> None in
-  expect_raises (fun () -> O.nearest okt p) exc_f Gg.V3.pp
+  match O.nearest okt p with
+  | _ -> Alcotest.fail "expected Not_found"
+  | exception Not_found -> ()
 
-(* Edge case tests for empty trees and basic operations *)
-
-let test_empty_tree =
-  test @@ fun () ->
-  (* Create an empty tree and verify it can be created without error *)
+let test_empty_tree () =
   let okt = O.of_list [] in
   let points = O.to_list okt in
-  equal Comparator.(list compare_ggv3) [] points
+  Alcotest.(check (list ggv3_testable)) "empty" [] points
 
-let test_single_point =
-  test @@ fun () ->
-  (* Test tree with a single point *)
+let test_single_point () =
   let pt = Gg.V3.v 0.5 0.5 0.5 in
   let okt = O.of_list [ pt ] in
   let points = O.to_list okt in
-  equal Comparator.(list compare_ggv3) [ pt ] points
+  Alcotest.(check (list ggv3_testable)) "single point" [ pt ] points
 
-let test_duplicate_points =
-  test @@ fun () ->
-  (* Test tree with duplicate points *)
+let test_duplicate_points () =
   let pt = Gg.V3.zero in
   let okt = O.of_list [ pt; pt; pt ] in
   let points = O.to_list okt |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) [ pt; pt; pt ] points
+  Alcotest.(check (list ggv3_testable)) "duplicates preserved" [ pt; pt; pt ] points
 
-let test_nearest_single_point =
-  test @@ fun () ->
-  (* Test nearest on tree with single point *)
+let test_nearest_single_point () =
   let pt = Gg.V3.v 0.1 0.2 0.3 in
   let okt = O.of_list [ pt ] in
   let query = Gg.V3.v 0.5 0.5 0.5 in
   let result = O.nearest okt query in
-  equal compare_ggv3 pt result
+  Alcotest.check ggv3_testable "only point" pt result
 
-let test_invalid_leaf_size =
-  test @@ fun () ->
-  (* Test that invalid leaf_size parameters raise an error *)
-  let* leaf_size = Sample.one_value_of [ 0; -1; -10 ] in
-  let points = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] in
-  let exc_f f =
-    try Some (Ok (f ())) with Invalid_argument _ -> None
-  in
-  expect_raises
-    (fun () -> O.of_list ~leaf_size points)
-    exc_f
-    (fun fmt _ -> Format.fprintf fmt "<tree>")
-
-let test_insert_to_empty =
-  test @@ fun () ->
-  (* Test inserting a point into an empty tree *)
+let test_insert_to_empty () =
   let okt = O.of_list [] in
   let pt = Gg.V3.v 0.5 0.5 0.5 in
   let new_okt = O.insert okt pt in
   let points = O.to_list new_okt in
-  equal Comparator.(list compare_ggv3) [ pt ] points
+  Alcotest.(check (list ggv3_testable)) "inserted point" [ pt ] points
 
-let test_insert_multiple =
-  test @@ fun () ->
-  (* Test inserting multiple points one by one *)
+let test_insert_multiple () =
   let pt1 = Gg.V3.v 0.1 0.1 0.1 in
   let okt1 = O.of_list [ pt1 ] in
   let pt2 = Gg.V3.v 0.9 0.9 0.9 in
   let okt2 = O.insert okt1 pt2 in
   let points = O.to_list okt2 |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) (sort_ggv3_list [ pt1; pt2 ]) points
+  Alcotest.(check (list ggv3_testable)) "both points" (sort_ggv3_list [ pt1; pt2 ]) points
 
-let test_points_at_boundaries =
-  test @@ fun () ->
-  (* Test with points at coordinate boundaries *)
+let test_points_at_boundaries () =
   let points =
     [
       Gg.V3.v 0. 0. 0.;
@@ -293,43 +159,148 @@ let test_points_at_boundaries =
   in
   let okt = O.of_list points in
   let result = O.to_list okt |> sort_ggv3_list in
-  equal Comparator.(list compare_ggv3) (sort_ggv3_list points) result
+  Alcotest.(check (list ggv3_testable)) "boundary points" (sort_ggv3_list points) result
+
+let test_invalid_leaf_size leaf_size () =
+  let points = [ Gg.V3.ox; Gg.V3.oy; Gg.V3.oz ] in
+  match O.of_list ~leaf_size points with
+  | _ -> Alcotest.fail (Printf.sprintf "leaf_size %d should raise" leaf_size)
+  | exception Invalid_argument _ -> ()
+
+(* PROPERTY-BASED TESTS *)
+
+let qcheck_of_list_to_list_nonempty =
+  QCheck2.Test.make ~name:"[PBT] of_list/to_list roundtrip preserves all points"
+    ~print:(Format.asprintf "%a" pp_point_list)
+    QCheck2.Gen.(list_size (int_range 1 100) (gen_ggv3 0. 1.))
+    (fun points ->
+       let okt = O.of_list points in
+       let expected = points |> sort_ggv3_list in
+       let actual = O.to_list okt |> sort_ggv3_list in
+       List.length expected = List.length actual
+       && List.for_all2 (fun a b -> Gg.V3.compare a b = 0) expected actual)
+
+let qcheck_of_list_leaf_size =
+  let open QCheck2.Gen in
+  let gen =
+    let* leaf_size = int_range 1 32 in
+    let* points = list_size (int_range 1 100) (gen_ggv3 0. 1.) in
+    return (leaf_size, points)
+  in
+  QCheck2.Test.make ~name:"[PBT] of_list with random leaf_size preserves all points"
+    ~print:(fun (ls, pts) ->
+        Printf.sprintf "leaf_size=%d, %s" ls
+          (Format.asprintf "%a" pp_point_list pts))
+    gen
+    (fun (leaf_size, points) ->
+       let okt = O.of_list ~leaf_size points in
+       let expected = points |> sort_ggv3_list in
+       let actual = O.to_list okt |> sort_ggv3_list in
+       List.length expected = List.length actual
+       && List.for_all2 (fun a b -> Gg.V3.compare a b = 0) expected actual)
+
+let qcheck_nearest_random_target_nonempty_tree =
+  let open QCheck2.Gen in
+  let gen =
+    let* points = list_size (int_range 1 100) (gen_ggv3 0. 1.) in
+    let* target = gen_ggv3 0. 1. in
+    return (points, target)
+  in
+  QCheck2.Test.make ~name:"[PBT] nearest matches brute-force oracle on random points"
+    ~print:(fun (pts, tgt) ->
+        Format.asprintf "target=%a, points=%a" Gg.V3.pp tgt pp_point_list pts)
+    gen
+    (fun (points, target) ->
+       let okt = O.of_list points in
+       let expected = nearest points target in
+       let result = O.nearest okt target in
+       Gg.V3.compare result expected = 0)
+
+let qcheck_insert =
+  let open QCheck2.Gen in
+  let gen =
+    let* points = list_size (int_range 1 50) (gen_ggv3 0. 1.) in
+    let* new_pt = gen_ggv3 0. 1. in
+    return (points, new_pt)
+  in
+  QCheck2.Test.make ~name:"[PBT] insert preserves all points in to_list"
+    ~print:(fun (pts, pt) ->
+        Format.asprintf "new=%a, points=%a" Gg.V3.pp pt pp_point_list pts)
+    gen
+    (fun (points, new_pt) ->
+       let okt = O.of_list points in
+       let okt' = O.insert okt new_pt in
+       let expected = (new_pt :: points) |> sort_ggv3_list in
+       let actual = O.to_list okt' |> sort_ggv3_list in
+       List.length expected = List.length actual
+       && List.for_all2 (fun a b -> Gg.V3.compare a b = 0) expected actual)
+
+let qcheck_insert_nearest =
+  let open QCheck2.Gen in
+  let gen =
+    let* points = list_size (int_range 1 50) (gen_ggv3 0. 1.) in
+    let* new_pt = gen_ggv3 0. 1. in
+    return (points, new_pt)
+  in
+  QCheck2.Test.make ~name:"[PBT] nearest returns inserted point when queried at same location"
+    ~print:(fun (pts, pt) ->
+        Format.asprintf "new=%a, points=%a" Gg.V3.pp pt pp_point_list pts)
+    gen
+    (fun (points, new_pt) ->
+       let okt = O.of_list points in
+       let okt' = O.insert okt new_pt in
+       let result = O.nearest okt' new_pt in
+       Gg.V3.compare result new_pt = 0)
+
+let test_pp_smoke () =
+  let okt = O.of_list [ Gg.V3.zero; Gg.V3.v 0.5 0.5 0.5 ] in
+  let s = Format.asprintf "%a" O.pp okt in
+  Alcotest.(check bool) "pp produces non-empty output" true (String.length s > 0)
 
 (* RUNNER *)
 
-let of_list_suite =
-  suite
-    [
-      ("3 static points", test_of_list);
-      ("sampled points, nonempty", test_of_list_sample_nonempty);
-    ]
-
-let nearest_suite =
-  suite
-    [
-      ("handpicked", test_nearest_handpicked);
-      ("sampled points, nonempty", test_nearest_sample_nonempty);
-      ("sampled points, []", test_nearest_sample_empty);
-      ("single point", test_nearest_single_point);
-    ]
-
-let edge_cases_suite =
-  suite
-    [
-      ("empty tree", test_empty_tree);
-      ("single point", test_single_point);
-      ("duplicate points", test_duplicate_points);
-      ("insert to empty", test_insert_to_empty);
-      ("insert multiple", test_insert_multiple);
-      ("points at boundaries", test_points_at_boundaries);
-      ("invalid leaf_size", test_invalid_leaf_size);
-    ]
-
-let tests =
-  suite
-    [
-      ("of_list", of_list_suite);
-      ("nearest", nearest_suite);
-      ("edge_cases", edge_cases_suite);
-    ]
-let () = run tests
+let () =
+  let report_path =
+    try Some (Sys.getenv "JUNIT_REPORT_PATH") with Not_found -> None
+  in
+  let testsuite, exit_fn =
+    Junit_alcotest.run_and_report ~and_exit:false "oktree"
+      [
+        ( "of_list",
+          [
+            Alcotest.test_case "roundtrip of_list/to_list with 3 static points" `Quick test_of_list;
+          ]
+          @ List.map QCheck_alcotest.to_alcotest
+            [ qcheck_of_list_to_list_nonempty; qcheck_of_list_leaf_size ] );
+        ( "nearest",
+          nearest_handpicked_tests
+          @ [
+            Alcotest.test_case "raises Not_found on empty tree" `Quick test_nearest_sample_empty;
+            Alcotest.test_case "returns sole point in singleton tree" `Quick test_nearest_single_point;
+          ]
+          @ List.map QCheck_alcotest.to_alcotest
+            [ qcheck_nearest_random_target_nonempty_tree ] );
+        ( "insert",
+          [
+            Alcotest.test_case "insert into empty tree" `Quick test_insert_to_empty;
+            Alcotest.test_case "sequential inserts preserve all points" `Quick test_insert_multiple;
+          ]
+          @ List.map QCheck_alcotest.to_alcotest
+            [ qcheck_insert; qcheck_insert_nearest ] );
+        ( "edge_cases",
+          [
+            Alcotest.test_case "of_list [] produces empty tree" `Quick test_empty_tree;
+            Alcotest.test_case "of_list with single point" `Quick test_single_point;
+            Alcotest.test_case "of_list preserves duplicate points" `Quick test_duplicate_points;
+            Alcotest.test_case "of_list with boundary coordinates 0 and 1" `Quick test_points_at_boundaries;
+            Alcotest.test_case "pp produces non-empty output" `Quick test_pp_smoke;
+            Alcotest.test_case "of_list ~leaf_size:0 raises Invalid_argument" `Quick (test_invalid_leaf_size 0);
+            Alcotest.test_case "of_list ~leaf_size:(-1) raises Invalid_argument" `Quick (test_invalid_leaf_size (-1));
+            Alcotest.test_case "of_list ~leaf_size:(-10) raises Invalid_argument" `Quick (test_invalid_leaf_size (-10));
+          ] );
+      ]
+  in
+  (match report_path with
+   | Some path -> Junit.to_file (Junit.make [ testsuite ]) path
+   | None -> ());
+  exit_fn ()

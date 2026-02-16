@@ -44,6 +44,13 @@ NOTE: this will produce no output if tests have already been run with no code ch
 
 ...or also if it's misconfigured and finds no tests to run. Add `--force` arg to be sure tests are run.
 
+Tests use [Alcotest](https://github.com/mirage/alcotest) for unit tests and [QCheck](https://github.com/c-cube/qcheck) for property-based tests. Property-based tests default to 100 iterations locally. In CI, QCheck's built-in `QCHECK_LONG` mechanism scales this up:
+
+```sh
+# run with 10,000 iterations per PBT (same as CI)
+QCHECK_LONG=true QCHECK_LONG_FACTOR=100 dune test --force
+```
+
 ## Run CI locally (act)
 
 For developing the GitHub Actions locally.
