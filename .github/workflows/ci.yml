@@ -39,7 +39,7 @@ jobs:
           QCHECK_LONG: true
           QCHECK_LONG_FACTOR: 100
 
-      - name: Publish test results
+      - name: Publish test results for OCaml "${{ matrix.ocaml-version }}"
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
         with:
@@ -62,3 +62,21 @@ jobs:
         run: opam install . --deps-only --with-dev-setup --yes
 
       - uses: j178/prek-action@v1
+
+  build-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: 5.4
+
+      - run: opam install . --deps-only --with-doc
+      - run: opam exec -- dune build @doc
+
+      - name: Upload docs
+        uses: actions/upload-artifact@v4
+        with:
+          name: odoc-html
+          path: _build/default/_doc/_html/
