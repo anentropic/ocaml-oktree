@@ -21,6 +21,9 @@
  (optional)
  (libraries oplot))
 
+(documentation
+ (package oktree))
+
 (env
  (dev
   (flags
