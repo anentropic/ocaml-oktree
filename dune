@@ -1,4 +1,4 @@
-(dirs lib test benchmark)
+(dirs lib test benchmark doc)
 
 (alias
  (name default)
