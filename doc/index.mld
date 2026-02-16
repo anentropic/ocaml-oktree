@@ -61,3 +61,7 @@ Format.printf "%a" V3.pp nearest;;
 
 - {{!Oktree}Oktree} - Main API reference
 - {{!page-oktree}User Guide} - Comprehensive guide with examples
+
+{1 Project}
+
+- {{:https://github.com/anentropic/ocaml-oktree}GitHub repository}
