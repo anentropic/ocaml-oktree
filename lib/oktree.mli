@@ -35,7 +35,7 @@ v}
       let points = [ V3.zero; V3.v 0. 0.251 0.; V3.v 0. 0.23 0.; V3.v 0.2 0.1 0.2 ]
       let okt = Okt.of_list ~leaf_size:8 points
 
-          Format.printf "%a" Okt.pp okt;;
+      let () = Format.printf "%a" Okt.pp okt
 (*
 { Oktree.Make.leaf_size = 8;
   tree =
@@ -48,7 +48,7 @@ v}
       (* find closest match from [points] *)
       let nearest = Okt.nearest okt (V3.v 0.2 0.1 0.3)
 
-          Format.printf "%a" V3.pp nearest;;
+      let () = Format.printf "%a" V3.pp nearest
       (* (0.2 0.1 0.2)- : unit = () *)
     ]}
 

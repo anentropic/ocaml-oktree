@@ -149,7 +149,7 @@ module type VEC3 = sig
       {[
         open Gg
         let v = V3.v 1.0 2.0 3.0
-            Format.printf "Point: %a@." V3.pp v
+        let () = Format.printf "Point: %a@." V3.pp v
         (* Output: Point: (1 2 3) *)
       ]}
   *)
@@ -180,7 +180,7 @@ module type S = sig
         module Okt = Oktree.Make (V3)
 
         let tree = Okt.of_list [V3.zero; V3.v 1.0 0.0 0.0]
-            Format.printf "%a@." Okt.pp tree
+        let () = Format.printf "%a@." Okt.pp tree
         (* Prints the tree structure showing nodes and leaves *)
       ]}
   *)
