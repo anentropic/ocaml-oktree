@@ -76,7 +76,7 @@ jobs:
       - run: opam exec -- dune build @doc
 
       - name: Upload docs
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: odoc-html
           path: _build/default/_doc/_html/
