@@ -42,6 +42,7 @@ jobs:
       - name: Publish test results for OCaml "${{ matrix.ocaml-version }}"
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
+        continue-on-error: true
         with:
           check_name: Dune unit test results
           files: _build/default/test/junit.xml
