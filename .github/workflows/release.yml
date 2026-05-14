@@ -92,7 +92,7 @@ jobs:
       # Create a GitHub release with auto-generated release notes from commits
       - name: Create GitHub Release
         if: steps.release_check.outputs.release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
