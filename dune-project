@@ -37,8 +37,8 @@
   (opam-publish :with-dev-setup)
   (ocaml-lsp-server :with-dev-setup)
   ; - for benchmark suite
-  (core_bench (and :with-dev-setup (>= 0.15.0)))
-  (core_unix (and :with-dev-setup (>= 0.15.0)))
+  (core_bench (and :with-dev-setup (>= v0.15.0)))
+  (core_unix (and :with-dev-setup (>= v0.15.0)))
   (landmarks :with-dev-setup)
   (landmarks-ppx :with-dev-setup)
   ; - for REPL
