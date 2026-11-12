@@ -23,7 +23,7 @@ jobs:
       # Checkout the exact commit that passed CI, including all history and tags
       # for version comparison
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
           ref: ${{ github.event.workflow_run.head_sha }}
@@ -92,7 +92,7 @@ jobs:
       # Create a GitHub release with auto-generated release notes from commits
       - name: Create GitHub Release
         if: steps.release_check.outputs.release == 'true'
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@v3.0.4
         with:
           tag_name: "v${{ steps.version.outputs.version }}"
           generate_release_notes: true
@@ -100,7 +100,7 @@ jobs:
       # Set up OCaml environment with compiler version 5 for opam-publish
       - name: Set up OCaml
         if: steps.release_check.outputs.release == 'true'
-        uses: ocaml/setup-ocaml@v3
+        uses: ocaml/setup-ocaml@v3.9.1
         with:
           ocaml-compiler: 5
           dune-cache: true
